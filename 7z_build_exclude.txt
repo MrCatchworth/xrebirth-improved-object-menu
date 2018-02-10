@@ -1,0 +1,3 @@
+*.sh
+.git*
+7z_build_exclude.txt

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mdscript name="MEJ_ImprObjectMenu_Menu" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="md.xsd">
+    <cues>
+        <cue name="MeJ_OpenObjectMenu" instantiate="true" namespace="this">
+            <conditions>
+                <check_any>
+                    <event_conversation_next_section section="MeJ_OpenObjectMenu"/>
+                    <event_conversation_returned_to_section section="MeJ_OpenObjectMenu"/>
+                    <event_conversation_next_section section="MeJ_VanillaObjectMenu"/>
+                    <event_conversation_returned_to_section section="MeJ_VanillaObjectMenu"/>
+                </check_any>
+            </conditions>
+            <actions>
+                <do_if value="event.param == 'MeJ_VanillaObjectMenu'">
+                    <open_conversation_menu menu="ObjectMenu" param="event.param2" param2="event.param3" />
+                    <add_conversation_view view="closeupdetailmonitor" />
+                </do_if>
+                <do_elseif value="event.param == 'MeJ_OpenObjectMenu'">
+                    <open_conversation_menu menu="MeJ_ImprovedObjectMenu"  param="event.param2" param2="event.param3"/>
+                    <add_conversation_view view="closeupdetailmonitor"/>
+                </do_elseif>
+            </actions>
+        </cue>
+    </cues>
+</mdscript>

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="iso-8859-1"?>
+<content id="mej_improved_object_menu" name="Improved Object Menu" description="A replacement for the object details menu to fit more and prettier information on the screen." author="MegaJohnny" version="100" date="2018-01-19" lastupdate="1428141004">
+  <text language="44" description="A replacement for the object details menu to fit more and prettier information on the screen."></text>
+  <dependency version="410"></dependency>
+</content>
