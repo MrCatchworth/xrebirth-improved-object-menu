@@ -56,11 +56,10 @@ local menu = {
 	orange = { r = 255, g = 192, b = 0, a = 100 },
     shieldColor = { r = 0, g = 192, b = 255 , a = 100 },
     
-    stretchyColumns = 3,
     selectTableHeight = 535
 }
 
-local function getMultiColWidth(startIndex, endIndex)
+function menu.getMultiColWidth(startIndex, endIndex)
     local width = 0
     local count = 0
     -- local borderWidth = 3
@@ -76,12 +75,6 @@ local function getMultiColWidth(startIndex, endIndex)
     end
     
     return width
-end
-
-local function getStatusBar(frac, height, width, color)
-    frac = math.max(frac, 0.01)
-    frac = math.min(frac, 1)
-    return Helper.createIcon("solid", false, color.r, color.g, color.b, color.a, 0, 0, height, frac * width)
 end
 
 local function addRowByClass(setup, cat, rowClass, ...)
@@ -102,9 +95,9 @@ local function addRowByClass(setup, cat, rowClass, ...)
         
         table.insert(cat.rows, rowData)
     end
+    
+    return rowData
 end
-
-menu.extendedCategories = {}
 
 --menu categories start here
 --=========================================
@@ -125,6 +118,7 @@ function catGeneral:display(setup)
     addRowByClass(setup, self, menu.rowClasses.location)
     addRowByClass(setup, self, menu.rowClasses.hullShield, "hull")
     addRowByClass(setup, self, menu.rowClasses.hullShield, "shield")
+    addRowByClass(setup, self, menu.rowClasses.jumpdrive)
     addRowByClass(setup, self, menu.rowClasses.fuel)
 end
 
@@ -133,9 +127,13 @@ local catCargo = menu.categories.cargo
 catCargo.visible = false
 catCargo.enabled = false
 catCargo.extended = true
+catCargo.headerColSpans = {3, 2}
+catCargo.headerCells = {"", ""}
+catCargo.customHeader = true
 function catCargo:init()
     self.rawStorage = GetStorageData(menu.object)
     self.storageSummary = self:aggregateStorage(self.rawStorage)
+    self.products = GetComponentData(menu.object, "products")
     
     local stored = self.rawStorage.stored
     local cap = self.rawStorage.capacity
@@ -160,27 +158,33 @@ function catCargo:init()
         end
     end
     
-    local knownOtherCase = menu.type == "station" and self.rawStorage.estimated ~= nil
-    self.amountKnown = IsInfoUnlockedForPlayer(menu.object, "storage_amounts") or knownOtherCase
-    self.capacityKnown = IsInfoUnlockedForPlayer(menu.object, "storage_capacity") or knownOtherCase
-    self.waresKnown = IsInfoUnlockedForPlayer(menu.object, "storage_warelist") or knownOtherCase
+    local otherCase = menu.type == "station" and self.rawStorage.estimated ~= nil
+    self.amountKnown = IsInfoUnlockedForPlayer(menu.object, "storage_amounts") or otherCase
+    self.capacityKnown = IsInfoUnlockedForPlayer(menu.object, "storage_capacity") or otherCase
+    self.waresKnown = IsInfoUnlockedForPlayer(menu.object, "storage_warelist") or otherCase
     
     self.visible = cap > 0
     self.enabled = (stored > 0 or self.rawStorage.estimated) and self.waresKnown
     
     self.unit = " " .. ReadText(1001, 110)
     
-    local amountString = Helper.unlockInfo(self.amountKnown, ConvertIntegerString(stored, true, 4, true))
-    local capacityString = Helper.unlockInfo(self.capacityKnown, ConvertIntegerString(cap, true, 4, true))
-    
     if self.visible then
         local sep = "\27Z -- \27X"
-        self.header = ReadText(1001, 1400) .. sep .. amountString .. "/" .. capacityString .. self.unit .. sep .. wareCount .. " " .. (wareCount == 1 and ReadText(1001, 45) or ReadText(1001, 46))
+        -- local mainHeader = ReadText(1001, 1400) .. sep .. amountString .. "/" .. capacityString .. self.unit .. sep .. wareCount .. " " .. (wareCount == 1 and ReadText(1001, 45) or ReadText(1001, 46))
+        
+        local amountString = Helper.unlockInfo(self.amountKnown, ConvertIntegerString(stored, true, 4, true))
+        local capacityString = Helper.unlockInfo(self.capacityKnown, ConvertIntegerString(cap, true, 4, true))
+        self.headerCells[1] = ReadText(1001, 1400) .. sep .. amountString .. "/" .. capacityString .. self.unit
+        
+        local hasLimits = self.products and next(self.products)
+        self.headerCells[2] = Helper.createFontString(ReadText(1001, 20) .. (hasLimits and " / " .. ReadText(1001, 1127) or ""), false, "right")
+        
+        self.rowsByWare = {}
     end
 end
 function catCargo:display(setup)
-    for k, ware in Helper.orderedPairsByWareName(self.storageSummary) do
-        addRowByClass(setup, self, menu.rowClasses.ware, ware)
+    for ware, data in Helper.orderedPairsByWareName(self.storageSummary) do
+        self.rowsByWare[ware] = addRowByClass(setup, self, menu.rowClasses.ware, data)
     end
 end
 function catCargo:aggregateStorage(rawStorage)
@@ -196,6 +200,19 @@ function catCargo:aggregateStorage(rawStorage)
     end
     
     return cargo
+end
+catCargo.updateInterval = 1
+function catCargo:update()
+    self.rawStorage = GetStorageData(menu.object)
+    self.storageSummary = self:aggregateStorage(self.rawStorage)
+    
+    for ware, row in pairs(self.rowsByWare) do
+        if self.storageSummary[ware] then
+            row:updateAmount(self.storageSummary[ware].amount)
+        else
+            row:updateAmount(0)
+        end
+    end
 end
 function catCargo:getDetailButtonProps()
     local text = ReadText(1001, 1400)
@@ -222,13 +239,15 @@ function catCrew:init()
             table.insert(self.controlEntities, npc)
         end
     end
+    table.insert(self.controlEntities, menu.buildingArchitect)
     
     self.visible = menu.type ~= "block" and not menu.isPlayerShip
-    self.enabled = #self.controlEntities > 0
+    self.enabled = #self.npcs > 0
     self.namesKnown = IsInfoUnlockedForPlayer(menu.object, "operator_name")
     self.commandsKnown = IsInfoUnlockedForPlayer(menu.object, "operator_commands")
 end
 function catCrew:display(setup)
+    addRowByClass(setup, self, menu.rowClasses.personnel)
     for k, npc in pairs(self.controlEntities) do
         addRowByClass(setup, self, menu.rowClasses.npc, npc)
     end
@@ -260,23 +279,16 @@ catArms.header = ReadText(1001, 1105)
 catArms.visible = false
 catArms.enabled = false
 catArms.extended = true
-function catArms:init()
-    self.armament = GetAllWeapons(menu.object)
-    
-    --don't show empty missile ammo
-    for i = #self.armament.missiles, 1, -1 do
-        if self.armament.missiles[i].amount == 0 then
-            table.remove(self.armament.missiles, i)
-        end
-    end
-    
+
+-- return true if isUpdate is set, and the operationals have changed
+function catArms:collectData(isUpdate)
     self.upgrades = GetAllUpgrades(menu.object, false)
-    
     self.fixedTurrets = GetNotUpgradesByClass(menu.object, "turret")
     
     self.fixedTurrets.total = 0
     self.fixedTurrets.operational = 0
     
+    --we get a list of components from GetNotUpgrades, but we convert them into a format similar to that given by GetAllUpgrades, so the row class can use either interchangeably
     for k, turret in ipairs(self.fixedTurrets) do
         local name, macro = GetComponentData(turret, "name", "macro")
         local defStatusKnown = IsInfoUnlockedForPlayer(turret, "defence_status")
@@ -317,6 +329,20 @@ function catArms:init()
         self.defStatus = self.defStatus + self.fixedTurrets.operational + self.upgrades.totaloperational
         self.estimated = self.fixedTurrets.estimated or self.upgrades.estimated
     end
+end
+
+function catArms:init()
+    self.armament = GetAllWeapons(menu.object)
+    
+    --don't show empty missile ammo
+    for i = #self.armament.missiles, 1, -1 do
+        if self.armament.missiles[i].amount == 0 then
+            table.remove(self.armament.missiles, i)
+        end
+    end
+    
+    self:collectData()
+    
     if #self.armament.missiles > 0 or #self.armament.weapons > 0 then
         self.defLevel = self.defLevel + #self.armament.missiles + #self.armament.weapons
         self.defStatus = self.defStatus + #self.armament.missiles + #self.armament.weapons
@@ -330,18 +356,43 @@ function catArms:init()
     self.enabled = enable
 end
 function catArms:display(setup)
-    for ut, upgrade in Helper.orderedPairs(self.upgrades) do
-        if not (ut == "totaltotal" or ut == "totalfree" or ut == "totaloperational" or ut == "totalconstruction" or ut == "estimated") and upgrade.total > 0 then
-            addRowByClass(setup, self, menu.rowClasses.upgrade, upgrade, self.estimated, self.defStatusKnown, self.defLevelKnown)
+    self.upgradeRows = {}
+    self.fixedTurretRows = {}
+    if not menu.isPlayerShip then
+        for ut, upgrade in Helper.orderedPairs(self.upgrades) do
+            if type(upgrade) == "table" and upgrade.total > 0 then
+                self.upgradeRows[ut] = addRowByClass(setup, self, menu.rowClasses.upgrade, upgrade, self.estimated)
+            end
         end
-    end
-    for macro, turret in pairs(self.fixedTurrets) do
-        if type(turret) == "table" and turret.operational > 0 then
-            addRowByClass(setup, self, menu.rowClasses.upgrade, turret, self.fixedTurrets.estimated, self.defStatusKnown, self.defLevelKnown)
+        for macro, turret in pairs(self.fixedTurrets) do
+            if type(turret) == "table" and turret.operational > 0 then
+                self.fixedTurretRows[macro] = addRowByClass(setup, self, menu.rowClasses.upgrade, turret, self.fixedTurrets.estimated)
+            end
         end
     end
     for k, weapon in ipairs(self.armament.weapons) do
-        addRowByClass(setup, self, menu.rowClasses.weapon, weapon)
+        local ffiMod = ffi.new("UIWeaponMod")
+        local retVal = C.GetInstalledWeaponMod(ConvertIDTo64Bit(weapon.component), ffiMod)
+        if not retVal then
+            ffiMod = nil
+        end
+        addRowByClass(setup, self, menu.rowClasses.weapon, weapon, ffiMod)
+    end
+end
+catArms.updateInterval = 2
+function catArms:update()
+    self:collectData()
+    for ut, row in pairs(self.upgradeRows) do
+        local upgrade = self.upgrades[ut]
+        if upgrade then
+            row:updateVal(upgrade)
+        end
+    end
+    for macro, row in pairs(self.fixedTurretRows) do
+        local turret = self.fixedTurrets[macro]
+        if turret then
+            row:updateVal(turret)
+        end
     end
 end
 
@@ -387,6 +438,8 @@ local catUnits = menu.categories.units
 catUnits.visible = false
 catUnits.enabled = true
 catUnits.extended = true
+catUnits.headerColSpans = {2, 2, 1}
+catUnits.headerCells = {"", "", ""}
 function catUnits:init()
     if not IsComponentClass(menu.object, "defensible") then
         self.visible = false
@@ -402,6 +455,7 @@ function catUnits:init()
         self.visible = false
         return
     end
+    self:aggregateByMacro()
     
     local hasUnits = false
     for k, unit in ipairs(self.units) do
@@ -424,7 +478,23 @@ function catUnits:init()
     
     self.visible = true
     
-    self.header = ReadText(1001, 22) .. "\27Z -- \27X" .. Helper.unlockInfo(self.amountKnown, self.units.stored) .. "\27Z / \27X" .. Helper.unlockInfo(self.capacityKnown, self.units.capacity)
+    local mainHeader = ReadText(1001, 22) .. "\27Z -- \27X" .. Helper.unlockInfo(self.amountKnown, self.units.stored) .. "\27Z / \27X" .. Helper.unlockInfo(self.capacityKnown, self.units.capacity)
+    if self.extended then
+        self.customHeader = true
+        self.headerCells[1] = mainHeader
+        self.headerCells[2] = Helper.createFontString(ReadText(1001, 20), false, "right")
+        self.headerCells[3] = Helper.createFontString(ReadText(1001, 1403), false, "right")
+    else
+        self.customHeader = false
+        self.header = mainHeader
+    end
+end
+
+function catUnits:aggregateByMacro()
+    self.unitsByMacro = {}
+    for k, unit in ipairs(self.units) do
+        self.unitsByMacro[unit.macro] = unit
+    end
 end
 
 function catUnits:display(setup)
@@ -434,508 +504,128 @@ function catUnits:display(setup)
         end
     end
 end
+
+catUnits.updateInterval = 3
+function catUnits:update()
+    if #self.rows == 0 then return end
+    
+    self.units = GetUnitStorageData(menu.object)
+    self:aggregateByMacro()
+    for k, row in ipairs(self.rows) do
+        local newUnit = self.unitsByMacro[row.unit.macro]
+        if newUnit then
+            row:updateUnit(newUnit)
+        else
+            DebugError("No unit with that macro")
+        end
+    end
+end
+
+menu.categories.playerUpgrades = {}
+local catPlayerUpgrades = menu.categories.playerUpgrades
+catPlayerUpgrades.visible = false
+catPlayerUpgrades.enabled = true
+catPlayerUpgrades.extended = true
+catPlayerUpgrades.upgradeCats = {"engine", "shieldgenerator", "scanner", "software"}
+catPlayerUpgrades.catHeaders = {
+    engine = ReadText(1001, 1103),
+    shieldgenerator = ReadText(1001, 1317),
+    scanner = ReadText(1001, 74),
+    software = ReadText(1001, 87)
+}
+catPlayerUpgrades.catNones = {
+    engine = ReadText(1001, 88),
+    shieldgenerator = ReadText(1001, 89),
+    scanner = ReadText(1001, 90),
+    software = ReadText(1001, 91)
+}
+catPlayerUpgrades.header = "Upgrades"
+function catPlayerUpgrades:init()
+    self.visible = menu.isPlayerShip
+    
+    if not self.visible then return end
+    
+    self.upgradesByCat = {}
+    for k, cat in pairs(self.upgradeCats) do
+        if not (ut == "totaltotal" or ut == "totalfree" or ut == "totaloperational" or ut == "totalconstruction" or ut == "estimated") then
+            self.upgradesByCat[cat] = GetAllUpgrades(menu.object, true, cat)
+        end
+    end
+end
+
+function catPlayerUpgrades:getSoftwareSlots(upgrades)
+    local organiseUpgrades = {}
+    local totalSlots = 0
+    for ut, upgrade in Helper.orderedPairs(upgrades) do
+        if not (ut == "totaltotal" or ut == "totalfree" or ut == "totaloperational" or ut == "totalconstruction" or ut == "estimated") then
+            local index
+            for i, cat in ipairs(organiseUpgrades) do
+                if cat == upgrade.tags then
+                    index = i
+                    break
+                end
+            end
+            if not index then
+                totalSlots = totalSlots + 1
+                table.insert(organiseUpgrades, upgrade.tags)
+            end
+        end
+    end
+    return totalSlots
+end
+
+function catPlayerUpgrades:displayCat(setup, cat)
+    local upgrades = self.upgradesByCat[cat]
+    local factor = cat == "engine" and 0.5 or 1
+    
+    local totalSlots = cat == "software" and self:getSoftwareSlots(upgrades) or upgrades.totaltotal
+    
+    setup:addHeaderRow({
+        "",
+        self.catHeaders[cat],
+        Helper.createFontString(factor * upgrades.totaloperational .. " / " .. factor * totalSlots, false, "right")
+    }, nil, {1, 4, 1})
+    
+    local displayed = false
+    for ut, upgrade in Helper.orderedPairs(upgrades) do
+        if not (ut == "totaltotal" or ut == "totalfree" or ut == "totaloperational" or ut == "totalconstruction" or ut == "estimated") then
+            if upgrade.operational ~= 0 then
+                addRowByClass(setup, self, menu.rowClasses.playerUpgrade, upgrade, factor)
+                displayed = true
+            end
+        end
+    end
+    
+    if not displayed then
+        setup:addSimpleRow({
+			"",
+			"--- " .. self.catNones[cat] .. " ---"
+		}, nil, {1, #menu.selectColWidths-1})
+    end
+end
+
+function catPlayerUpgrades:display(setup)
+    for k, cat in pairs(self.upgradesByCat) do
+        self:displayCat(setup, k)
+    end
+end
     
 --row classes start here
 --===================================================================
 
 menu.rowClasses = {}
 
-local function registerRowClass(name)
+function menu.registerRowClass(name)
     local rc = {}
     menu.rowClasses[name] = rc
     rc.metaTable = {__index = rc}
+    rc.className = name
     
     return rc
 end
 
-local rcName = registerRowClass("name")
-function rcName:getContent()
-    return true, {
-        "",
-        Helper.createFontString(Helper.unlockInfo(menu.unlocked.name, GetComponentData(menu.object, "name")), false, "center", menu.objNameColor.r, menu.objNameColor.g, menu.objNameColor.b, menu.objNameColor.a)
-    }, nil, {1, #menu.selectColWidths-1}
-end
-function rcName:getDetailButtonProps()
-    local enabled = menu.isPlayerOwned
-    local text = ReadText(1001, 1114)
-    
-    return text, enabled
-end
-function rcName:onDetailButtonPress()
-    Helper.closeMenuForSubSection(menu, false, "gMain_rename", { 0, 0, menu.object })
-end
-
-local rcFaction = registerRowClass("faction")
-function rcFaction:getContent()
-    self.faction = GetComponentData(menu.object, "owner")
-    
-    if self.faction == "ownerless" then return end
-    
-    local relation = GetUIRelation(self.faction)
-    local relationColor = "\27C"
-    local sign = ""
-    if relation > 0 then
-        relationColor = "\27G"
-        sign = "+"
-    elseif relation < 0 then
-        relationColor = "\27R"
-    end
-    
-    local facText = GetComponentData(menu.object, "ownername") .. relationColor .. " (" .. sign .. relation .. ")"
-    
-    return true, {
-        "",
-        Helper.createFontString(facText, false, "center")
-    }, nil, {1, #menu.selectColWidths-1}
-end
-function rcFaction:getDetailButtonProps()
-    local text = ReadText(1001, 2400)
-    local enabled = true
-    return text, enabled
-end
-function rcFaction:onDetailButtonPress()
-    Helper.closeMenuForSubSection(menu, false, "gEncyclopedia_faction", {0, 0, self.faction})
-end
-
-local rcHullShield = registerRowClass("hullShield")
-rcHullShield.updateInterval = 1
-function rcHullShield:getVals()
-    if self.property == "shield" then
-        return GetComponentData(menu.object, "shield", "shieldmax", "shieldpercent")
-    else
-        return GetComponentData(menu.object, "hull", "hullmax", "hullpercent")
-    end
-end
-function rcHullShield:getText()
-    return ConvertIntegerString(self.value, true, 4, true) .. "\27Z/\27X" .. ConvertIntegerString(self.maximum, true, 4, true)
-end
-function rcHullShield:getBar()
-    return getStatusBar(self.value/self.maximum, Helper.standardTextHeight, menu.selectColWidths[4], self.barColor)
-end
-function rcHullShield:getContent(property)
-    self.property = property
-    
-    local value, maximum, pct = self:getVals()
-    self.barColor = self.property == "shield" and menu.shieldColor or menu.white
-    
-    if maximum <= 0 then return end
-    
-    self.value, self.maximum, self.pct = value, maximum, pct
-    
-    return true, {Helper.createFontString(self:getText(), false, "right"), self:getBar()}, nil, {3, 1}
-end
-function rcHullShield:update(tab, row)
-    local val, maximum, pct = self:getVals()
-    
-    if val ~= self.value or maximum ~= self.maximum then
-        self.value = val
-        self.maximum = maximum
-        Helper.updateCellText(tab, row, 1, self:getText())
-        SetCellContent(tab, self:getBar(), row, 4)
-    end
-end
-
-local rcFuel = registerRowClass("fuel")
-function rcFuel:getContent()
-    local fuelAmount = GetComponentData(menu.object, "cargo").fuelcells or 0
-    local fuelCapacity = GetWareCapacity(menu.object, "fuelcells")
-    
-    if menu.type ~= "ship" or fuelCapacity == 0 then return end
-    
-    self.amount = fuelAmount
-    self.capacity = fuelCapacity
-    
-    local fuelText = ConvertIntegerString(fuelAmount, true, 4, true) .. "\27Z/\27X" .. ConvertIntegerString(fuelCapacity, true, 4, true)
-    
-    if menu.isPlayerOwned and fuelAmount / fuelCapacity <= 0.3 then
-        fuelText = "\27R" .. fuelText
-    end
-    
-    return true, {
-        Helper.createFontString(ReadText(20205, 800), false, "right"),
-        fuelText
-    }, nil, {2, 2}
-end
-
-local rcWare = registerRowClass("ware")
-function rcWare:getWareAmountCell()
-    local mot
-    local amountString = ConvertIntegerString(self.ware.amount, true, 4, true)
-    
-    --don't display any limit or warning info for non-player stations
-    if menu.isPlayerOwned then
-    
-        self.isFull = next(self.category.productCycleAmounts) and (GetWareCapacity(menu.object, self.ware.ware, false) <= self.cycleAmount or (self.limit - self.cycleAmount) < self.ware.amount)
-        if self.isFull then
-            if self.cycleAmount > 0 then
-                --it's a product with full storage (which actually stalls production so it gets a harsher colour)
-                amountString = "\27R" .. amountString .. "\27X"
-                mot = ReadText(1001, 1125)
-            else
-                --it's a resource with full storage
-                amountString = "\27Y" .. amountString .. "\27X"
-                mot = ReadText(1001, 1126)
-            end
-        end
-        
-        if self.limit > 0 then
-            amountString = amountString .. " / " .. ConvertIntegerString(self.limit, true, 4, true)
-        end
-    end
-    
-    return Helper.createFontString(amountString, false, "right", 255, 255, 255, 100, nil, nil, nil, nil, nil, nil, nil, mot)
-end
-function rcWare:getContent(ware)
-    self.ware = ware
-    
-    local limit = 0
-    if menu.isPlayerOwned and menu.type ~= "block" then
-        limit = GetWareProductionLimit(menu.object, ware.ware)
-    end
-    self.limit = limit
-    
-    self.cycleAmount = self.category.productCycleAmounts[ware.ware] and self.category.productCycleAmounts[ware.ware] + 1 or 0
-    
-    local totalVolume = ware.amount * ware.volume
-    local icon = GetWareData(ware.ware, "icon")
-    return true, {
-        Helper.createButton(nil, Helper.createButtonIcon(icon, nil, 255, 255, 255, 100), false, true),
-        ware.name,
-        self:getWareAmountCell(),
-        ConvertIntegerString(totalVolume, true, 4, true) .. "\27Z" .. self.category.unit
-    }, nil, {1, 1, 1, 1}
-end
-function rcWare:applyScripts(tab, row)
-    Helper.setButtonScript(menu, nil, tab, row, 1, function()
-        Helper.closeMenuForSubSection(menu, false, "gEncyclopedia_ware", { 0, 0, "wares", self.ware.ware })
-        menu.cleanup()
-    end)
-end
-
-local rcNpc = registerRowClass("npc")
-function rcNpc:getContent(npc)
-    self.npc = npc
-    
-    local name, typeString, typeIcon, typeName, isControlEntity, combinedSkill, skillsKnown = GetComponentData(npc, "name", "typestring", "typeicon", "typename", "iscontrolentity", "combinedskill", "skillsvisible")
-    local aiCommand = Helper.parseAICommand(npc)
-    
-    self.name, self.typeString = name, typeString
-    
-    local nameCell = Helper.unlockInfo(self.category.namesKnown, name)
-    if skillsKnown then
-        nameCell = "\27Y"..combinedSkill.."\27X "..nameCell
-    end
-    
-    return true, {
-        Helper.createIcon(typeIcon, false, 255, 255, 255, 100, 0, 0, Helper.standardTextHeight, Helper.standardButtonWidth),
-        -- typeName .. " " .. name,
-        nameCell,
-        Helper.unlockInfo(self.category.commandsKnown, aiCommand)
-    }, nil, {1, 1, 2}
-end
-function rcNpc:getDetailButtonProps()
-    local text = ReadText(1001, 2961) .. " (" .. Helper.unlockInfo(self.category.namesKnown, self.name) .. ")"
-    local enabled = self.category.namesKnown
-    
-    return text, enabled
-end
-function rcNpc:onDetailButtonPress()
-    Helper.closeMenuForSubSection(menu, false, "gMain_charOrders", { 0, 0, self.npc })
-end
-
-local rcLocation = registerRowClass("location")
-rcLocation.updateInterval = 1
-function rcLocation:getContent()
-    local cluster, sector, zone
-    
-    self.zone = GetContextByClass(menu.object, "zone", false)
-    
-    return true, {
-        Helper.createIcon("menu_sector", false, 255, 255, 255, 100, 0, 0, Helper.standardTextHeight, Helper.standardButtonWidth),
-        Helper.createFontString(self:getLocationText(), false, "center")
-    }, nil, {1, 3}
-end
-function rcLocation:getLocationText()
-    if not menu.unlocked.name then return ReadText(1001, 3210) end
-    
-    local sep = " \27Z/\27X "
-    
-    local zone = self.zone
-    local sector = GetContextByClass(menu.object, "sector", false)
-    local cluster = GetContextByClass(menu.object, "cluster", false)
-    
-    
-    local locText = GetComponentData(zone, "name")
-    if sector then
-        locText = GetComponentData(sector, "name") .. sep .. locText
-    end
-    locText = GetComponentData(cluster, "name") .. sep .. locText
-    
-    return locText
-end
-function rcLocation:update(tab, row)
-    if not menu.unlocked.name then return end
-    
-    local newZone = GetContextByClass(menu.object, "zone", false)
-    
-    self.isRenameButton = menu.isPlayerOwned and menu.type == "station" and GetComponentData(GetComponentData(menu.object, "zoneid"), "istemporaryzone")
-    
-    if not IsSameComponent(self.zone, newZone) then
-        self.zone = newZone
-        Helper.updateCellText(tab, row, 2, self:getLocationText())
-    end
-end
-function rcLocation:getDetailButtonProps()
-    local text = self.isRenameButton and ReadText(1001, 1114) or ReadText(1001, 3408)
-    local enabled = true
-    
-    return text, enabled
-end
-function rcLocation:onDetailButtonPress()
-    if self.isRenameButton then
-        Helper.closeMenuForSubSection(menu, false, "gMain_rename", { 0, 0, GetComponentData(menu.object, "zoneid") })
-    else
-        Helper.closeMenuForSubSection(menu, false, "gMainNav_menumap", { 0, 0, "zone", GetContextByClass(menu.object, "zone", true), nil, menu.object })
-    end
-end
-
-local rcUpgrade = registerRowClass("upgrade")
-function rcUpgrade:getContent(weapon, estimated, defStatusKnown, defLevelKnown)
-    local operational = weapon.operational
-    local total = weapon.total
-    
-    local color
-    if operational/total < 0.5 then
-        color = Helper.statusRed
-    else
-        color = menu.white
-    end
-    
-    return true, {
-        Helper.createFontString(weapon.name, false, "right"),
-        Helper.createFontString(Helper.estimateString(estimated) .. Helper.unlockInfo(defStatusKnown, operational), false, "right", color.r, color.g, color.b, color.a),
-        Helper.createFontString(Helper.estimateString(estimated) .. Helper.unlockInfo(defLevelKnown, total), false, "right")
-    }, nil, {2, 1, 1}
-end
-
-local rcWeapon = registerRowClass("weapon")
-function rcWeapon:getContent(weapon)
-    self.weapon = weapon
-    return true, {
-        Helper.createButton(nil, Helper.createButtonIcon("menu_info", nil, 255, 255, 255, 100), false, true),
-        Helper.createFontString(weapon.name, false, "right"),
-        Helper.createFontString(ConvertIntegerString(weapon.dps, true, nil, true), false, "right"),
-        Helper.createFontString(ConvertIntegerString(weapon.range, true, nil, true) .. " " .. ReadText(1001, 107), false, "right")
-    }, nil, {1, 1, 1, 1}
-end
-function rcWeapon:applyScripts(tab, row)
-    Helper.setButtonScript(menu, nil, tab, row, 1, function()
-        Helper.closeMenuForSubSection(menu, false, "gEncyclopedia_weapon", {0, 0, "weapontypes_primary", self.weapon.macro})
-    end)
-end
-
-local rcProduction = registerRowClass("production")
-rcProduction.updateInterval = 3
-function rcProduction:getTimeText()
-    local t = self.data.remainingtime
-    if t == 0 or not t then
-        return "\27Z--"
-    else
-        return ConvertTimeString(t, "%h\27Z : \27X%M\27Z : \27X%S", true)
-    end
-end
-
-rcProduction.colorNoStorage = {r = 255, g = 255, b = 0, a = 100}
-rcProduction.colorNoResources = {r = 255, g = 140, b = 0, a = 100}
-rcProduction.colorDamaged = {r = 255, g = 0, b = 0, a = 100}
-function rcProduction:getNameText()
-    local player = menu.isPlayerOwned
-    local state = self.data.state
-    local color = menu.white
-    local mot
-    
-    if self.nameKnown then
-        if not GetComponentData(self.module, "isfunctional") then
-            if player then color = self.colorDamaged end
-            mot = ReadText(1001, 1501)
-        elseif state == "waitingforresources" then
-            if player then color = self.colorNoResources end
-            mot = ReadText(1001, 1604)
-        elseif state == "waitingforstorage" then
-            if player then color = self.colorNoStorage end
-            mot = ReadText(1001, 1605)
-        elseif state ~= "producing" then
-            if player then color = self.colorNoStorage end
-            mot = ReadText(1001, 1606)
-        else
-            mot = ReadText(1001, 1607)
-        end
-    end
-    
-    return Helper.createFontString(self.name, false, "left", color.r, color.g, color.b, 100, nil, nil, nil, nil, nil, nil, nil, mot)
-end
-
-function rcProduction:getContent(module)
-    self.module = module
-    self.nameKnown = IsInfoUnlockedForPlayer(module, "name")
-    self.timeKnown = IsInfoUnlockedForPlayer(module, "production_time")
-    self.effKnown = IsInfoUnlockedForPlayer(module, "efficiency_amount")
-    
-    self.name = Helper.unlockInfo(self.nameKnown, GetComponentData(module, "name"))
-    
-    local data = GetProductionModuleData(module)
-    self.data = data
-    self.lastState = data.state
-    
-    local productText
-    local iconCell = ""
-    if data.products then
-        local product = data.products[1]
-        productText = "\27Z" .. ConvertIntegerString(product.cycle * 3600 / data.cycletime, true, 4, true) .. "x\27X" .. product.name
-        if self.effKnown then
-            iconCell = Helper.createIcon(GetWareData(product.ware, "icon"), false, 255, 255, 255, 100, 0, 0, Helper.standardTextHeight, Helper.standardButtonWidth)
-        end
-    else
-        productText = "\27Z--"
-    end
-    
-    return true, {
-        iconCell,
-        self:getNameText(),
-        Helper.unlockInfo(self.effKnown, productText),
-        Helper.unlockInfo(self.timeKnown, self:getTimeText())
-    }, nil, {1, 1, 1, 1}
-end
-
-function rcProduction:update(tab, row)
-    if not self.timeKnown or not IsComponentOperational(self.module) then return end
-    local data = GetProductionModuleData(self.module)
-    
-    if self.nameKnown and data.state ~= self.lastState then
-        --name cell needs updating
-        SetCellContent(tab, self:getNameText(), row, 2)
-    end
-    
-    self.data = data
-    Helper.updateCellText(tab, row, 4, self:getTimeText())
-    
-    self.lastState = data.state
-end
-
-function rcProduction:getDetailButtonProps()
-    local text = ReadText(1001, 2961)
-    local enabled = IsComponentOperational(self.module)
-    return text, enabled
-end
-function rcProduction:onDetailButtonPress()
-    if not IsComponentOperational(self.module) then return end
-    Helper.closeMenuForSubSection(menu, false, "gMain_objectProduction", { 0, 0, menu.object, self.module })
-end
-
-local rcShopList = registerRowClass("shoppingList")
-rcShopList.colorBuy = {r = 66, g = 92, b = 111, a = 60}
-rcShopList.colorSell = {r = 82, g = 122, b = 108, a = 60}
-rcShopList.colorExchange = {r = 68, g = 111, b = 65, a = 60}
-local function frameWhite(text)
-    return "\27W" .. text .. "\27X"
-end
-local function relationColorCode(isPlayer, isEnemy)
-    if isPlayer then
-        return "\27G"
-    elseif isEnemy then
-        return "\27R"
-    else
-        return "\27U"
-    end
-end
-function rcShopList:getContent(item, index)
-    self.item = item
-    self.index = index
-    
-    local cluster, sector, zone, isPlayerOwned, isEnemy = GetComponentData(item.station, "cluster", "sector", "zone", "isplayerowned", "isenemy")
-    local template
-    local location
-    local colorCode = relationColorCode(isPlayerOwned, isEnemy)
-    local baseColor
-    if item.iswareexchange or isPlayerOwned then
-        if item.ispassive then
-            if item.isbuyoffer then
-                template = ReadText(1001, 2993) -- object transfers to
-            else
-                template = ReadText(1001, 2995) -- object receives
-            end
-        else
-            if item.isbuyoffer then
-                template = ReadText(1001, 2993) -- object transfers to
-            else
-                template = ReadText(1001, 2992) -- object transfers from
-            end
-        end
-        
-        baseColor = self.colorExchange
-        template = string.format(template, frameWhite(ConvertIntegerString(item.amount, true, nil, true)), frameWhite(item.name), colorCode .. item.stationname .. "\27X")
-        
-        -- local locTemplate = ReadText(1001, 2994)
-        local locTemplate = "%s / %s / %s"
-        location = string.format(locTemplate, frameWhite(cluster), frameWhite(sector), frameWhite(zone))
-    else
-        if item.isbuyoffer then
-            template = ReadText(1001, 2976)
-            baseColor = self.colorSell
-        else
-            template = ReadText(1001, 2975)
-            baseColor = self.colorBuy
-        end
-        
-        template = string.format(template, frameWhite(ConvertIntegerString(item.amount, true, nil, true)), frameWhite(item.name), frameWhite(ConvertMoneyString(RoundTotalTradePrice(item.price * item.amount), false, true, nil, true)))
-        
-        if item.isbuyoffer and item.station then
-            local trade = GetTradeData(item.id)
-            local profit = GetReferenceProfit(menu.object, trade.ware, item.price, item.amount, index - 1)
-            template = template .. "\n" .. string.format(ReadText(1001, 6203), "\27G" .. (profit and ConvertMoneyString(profit, false, true, 6, true) or ReadText(1001, 2672)) .. "\27X " .. ReadText(1001, 101))
-        end
-        
-        local locTemplate = "%s -- %s / %s / %s"
-        -- local locTemplate = ReadText(1001, 2977)
-        if item.station then
-            location = string.format(locTemplate, colorCode .. item.stationname .. "\27X", frameWhite(cluster), frameWhite(sector), frameWhite(zone))
-        end
-    end
-    
-    local text = template
-    
-    if item.station then
-        text = text .. "\n" .. location
-    end
-    
-    return true, {
-        Helper.createFontString(text, false, "left", 170, 170, 170, 100, Helper.standardFont, Helper.standardFontSize, true, nil, nil, 0, Helper.standardSizeX/2 - 20)
-        --, Helper.standardSizeX/2 - menu.selectColWidths[1] - 7)
-    }, nil, {#menu.selectColWidths}, false, baseColor
-end
-
-local rcUnit = registerRowClass("unit")
-function rcUnit:getContent(unit)
-    self.unit = unit
-    
-    self.isMarine = IsMacroClass(unit.macro, "npc")
-    
-    return true, {
-        Helper.createButton(nil, Helper.createButtonIcon("menu_info", nil, 255, 255, 255, 100), false, self.category.detailsKnown),
-        Helper.unlockInfo(self.category.detailsKnown, unit.name),
-        Helper.createFontString(Helper.unlockInfo(self.category.amountKnown, unit.amount), false, "right"),
-        Helper.createFontString(Helper.unlockInfo(self.category.detailsKnown, unit.unavailable), false, "right")
-    }, nil, {1, 1, 1, 1}
-end
-function rcUnit:applyScripts(tab, row)
-    Helper.setButtonScript(menu, nil, tab, row, 1, function()
-        if self.isMarine then
-            Helper.closeMenuForSubSection(menu, false, "gEncyclopedia_character", {0, 0, "marines", self.unit.macro})
-        else
-            Helper.closeMenuForSubSection(menu, false, "gEncyclopedia_object", {0, 0, "shiptypes_xs", self.unit.macro, false})
-        end
-    end)
-end
+local rowClassLib = loadfile("extensions/mej_improved_object_menu/ui/addons/mej_improved_object_menu/rowclasses.lua")
+rowClassLib(menu)
 
 menu.categoryScheme = {
     left = {
@@ -948,6 +638,7 @@ menu.categoryScheme = {
         menu.categories.shoppingList,
         menu.categories.cargo,
         menu.categories.units,
+        menu.categories.playerUpgrades
     }
 }
 
@@ -967,7 +658,25 @@ function menu.processCategory(setup, cat)
     local rowData = {kind = "catheader", category = cat}
     
     local extendButton = Helper.createButton(Helper.createButtonText(isExtended and "-" or "+", "center", Helper.standardFont, Helper.standardFontSize, 255, 255, 255, 100), nil, false, cat.enabled, 0, 0, 0, Helper.standardTextHeight)
-    setup:addSimpleRow({extendButton, cat.header}, rowData, {1, 3}, nil, Helper.defaultHeaderBackgroundColor)
+    
+    local cells
+    local colSpans
+    if cat.customHeader then
+        colSpans = {1}
+        for k, colSpan in ipairs(cat.headerColSpans) do
+            table.insert(colSpans, colSpan)
+        end
+        
+        cells = {extendButton}
+        for k, catCell in ipairs(cat.headerCells) do
+            table.insert(cells, catCell)
+        end
+    else
+        colSpans = {1, #menu.selectColWidths-1}
+        cells = {extendButton, cat.header}
+    end
+    
+    setup:addSimpleRow(cells, rowData, colSpans, nil, Helper.defaultHeaderBackgroundColor)
     
     if isExtended then
         cat:display(setup)
@@ -975,35 +684,16 @@ function menu.processCategory(setup, cat)
 end
 
 local function setupColWidths()
-    local colWidthTemplate = {Helper.standardButtonWidth, "stretch"}
-    local fixedColWidth = 0
-    local fixedColumns = 0
-    for k, v in ipairs(colWidthTemplate) do
-        if v ~= "stretch" then
-            fixedColWidth = fixedColWidth + v
-            fixedColumns = fixedColumns + 1
-        end
+    local colFracs = {1/3, 1/6, 1/6, 1/12, 1/4}
+    local colWidths = {Helper.standardButtonWidth}
+    
+    local totalWidth = GetUsableTableWidth(Helper.standardSizeX/2 - 7 - Helper.standardButtonWidth, 0, #colFracs, true)
+    
+    for k, frac in pairs(colFracs) do
+        table.insert(colWidths, totalWidth * frac)
     end
     
-    local numStretch = menu.stretchyColumns
-    local numColumns = fixedColumns + numStretch
-    local totalWidth = GetUsableTableWidth(Helper.standardSizeX/2, 0, numColumns, true)
-    totalWidth = totalWidth - fixedColWidth
-    local stretchWidth = totalWidth / numStretch
-    
-    local baseColWidth = {}
-    
-    for i, col in ipairs(colWidthTemplate) do
-        if col == "stretch" then
-            for j = 1, numStretch do
-                table.insert(baseColWidth, stretchWidth)
-            end
-        else
-            table.insert(baseColWidth, col)
-        end
-    end
-    
-    menu.selectColWidths = baseColWidth
+    menu.selectColWidths = colWidths
 end
     
 
@@ -1016,14 +706,12 @@ local function init()
 end
 
 function menu.onShowMenu()
-	menu.object = menu.param[3] or GetPlayerTarget()
-	--menu.extendedcategories = menu.param[5] or menu.extendedcategories
+	menu.object = menu.param[3]
 	menu.category = ""
 	menu.unlocked = {}
 	menu.playerShip = GetPlayerPrimaryShipID()
 	menu.isPlayerShip = IsSameComponent(menu.object, menu.playerShip)
 	menu.isPlayerOwned = GetComponentData(menu.object, "isplayerowned")
-	menu.data = {}
 	menu.unlocked.name = IsInfoUnlockedForPlayer(menu.object, "name")
 	local object = menu.object
 	if IsComponentClass(object, "ship") then
@@ -1040,6 +728,16 @@ function menu.onShowMenu()
 			menu.type, menu.title = "block", ReadText(1001, 1102)
 		end
 	end
+    
+    menu.isBigShip = menu.type == "ship" and (IsComponentClass(menu.object, "ship_l") or IsComponentClass(menu.object, "ship_xl"))
+    
+    menu.buildingModule = GetComponentData(menu.object, "buildingmodule")
+    if menu.buildingModule then
+        menu.buildingContainer = GetContextByClass(menu.buildingModule, "container")
+        if menu.buildingContainer then
+            menu.buildingArchitect = GetComponentData(menu.buildingContainer, "architect")
+        end
+    end
 
 	if menu.type ~= "block" then
 		if IsComponentClass(object, "station") then
@@ -1076,6 +774,8 @@ function menu.onShowMenu()
     menu.buttonTableSpacerWidth = (buttonTableSpacerShare/buttonTableTotalShare) * buttonUsableWidth / 5
     
     menu.statusMessage = menu.statusMessage or "Ready"
+    
+    RegisterAddonBindings("ego_detailmonitor")
 
 	menu.displayMenu(true)
 end
@@ -1108,6 +808,7 @@ function menu.displayMenu(isFirstTime)
         
         topRowLeft = GetTopRow(menu.selectTableLeft)
         topRowRight = GetTopRow(menu.selectTableRight)
+        Helper.removeAllKeyBindings(menu)
         Helper.removeAllButtonScripts(menu)
         Helper.currentTableRow = {}
         Helper.currentTableRowData = nil
@@ -1121,6 +822,8 @@ function menu.displayMenu(isFirstTime)
         
         lastCurTable = menu.currentColumn
     end
+    
+    Helper.setKeyBinding(menu, menu.onHotkey)
     
     menu.nextTable = nil
     menu.nextRows = {}
@@ -1177,7 +880,7 @@ function menu.displayMenu(isFirstTime)
         menu.processCategory(setup, cat)
     end
     
-    local selectLeftDesc = setup:createCustomWidthTable(clone(menu.selectColWidths), false, false, true, tabLeft, numHeaderRows, 0, 0, menu.selectTableHeight, nil, topRowLeft, curRowLeft)
+    local selectLeftDesc = setup:createCustomWidthTable(clone(menu.selectColWidths), false, false, true, tabLeft, numHeaderRows, 0, 0, menu.selectTableHeight, true, topRowLeft, curRowLeft)
     
     local rowDataLeft = clone(menu.rowDataMap)
     menu.rowDataMap = {}
@@ -1191,7 +894,7 @@ function menu.displayMenu(isFirstTime)
         menu.processCategory(setup, cat)
     end
     
-    local selectRightDesc = setup:createCustomWidthTable(clone(menu.selectColWidths), false, false, true, tabRight, 0, (Helper.standardSizeX/2) - 7, 0, menu.selectTableHeight, nil, topRowRight, curRowRight)
+    local selectRightDesc = setup:createCustomWidthTable(clone(menu.selectColWidths), false, false, true, tabRight, 0, (Helper.standardSizeX/2) - 7, 0, menu.selectTableHeight, true, topRowRight, curRowRight)
     
     local rowDataRight = clone(menu.rowDataMap)
     menu.rowDataMap = {}
@@ -1205,11 +908,10 @@ function menu.displayMenu(isFirstTime)
         Helper.getEmptyCellDescriptor(),
         Helper.createButton(Helper.createButtonText(ReadText(1001, 2669), "center", Helper.standardFont, 11, 255, 255, 255, 100), nil, false, true, 0, 0, 150, 25, nil, Helper.createButtonHotkey("INPUT_STATE_DETAILMONITOR_B", true)),
         Helper.getEmptyCellDescriptor(),
-        Helper.createButton(Helper.createButtonText(ReadText(1001, 2669), "center", Helper.standardFont, 11, 255, 255, 255, 100), nil, false, true, 0, 0, 150, 25, nil, Helper.createButtonHotkey("INPUT_STATE_DETAILMONITOR_BACK", true)),
+        Helper.createButton(Helper.createButtonText(ReadText(1001, 1113), "center", Helper.standardFont, 11, 255, 255, 255, 100), nil, false, true, 0, 0, 150, 25, nil, Helper.createButtonHotkey("INPUT_STATE_DETAILMONITOR_BACK", true)),
         Helper.getEmptyCellDescriptor(),
-        Helper.createButton(Helper.createButtonText(ReadText(1001, 2669), "center", Helper.standardFont, 11, 255, 255, 255, 100), nil, false, true, 0, 0, 150, 25, nil, Helper.createButtonHotkey("INPUT_STATE_DETAILMONITOR_Y", true)),
+        Helper.createButton(Helper.createButtonText(ReadText(1001, 1109), "center", Helper.standardFont, 11, 255, 255, 255, 100), nil, false, not menu.isPlayerShip, 0, 0, 150, 25, nil, Helper.createButtonHotkey("INPUT_STATE_DETAILMONITOR_Y", true)),
         Helper.getEmptyCellDescriptor(),
-        -- Helper.createButton(Helper.createButtonText(ReadText(1001, 2669), "center", Helper.standardFont, 11, 255, 255, 255, 100), nil, false, true, 0, 0, 150, 25, nil, Helper.createButtonHotkey("INPUT_STATE_DETAILMONITOR_X", true)),
         --we'll be naughty here and just replace it instantly rather than make it now
         Helper.getEmptyCellDescriptor(),
         Helper.getEmptyCellDescriptor()
@@ -1226,7 +928,7 @@ function menu.displayMenu(isFirstTime)
         menu.buttonTableSpacerWidth,
         menu.buttonTableButtonWidth,
         menu.buttonTableSpacerWidth
-    }, false, false, false, tabButton, 0, 0, Helper.standardSizeY-50, 0, false)
+    }, false, false, false, tabButton, 0, 0, Helper.standardSizeY-30, 0, false)
 
     --create and display the table view
     --=========================================
@@ -1268,15 +970,46 @@ function menu.displayMenu(isFirstTime)
         end
         
         if rowData.kind == "regular" then
+            rowData.tab = tab
             if rowData.applyScripts then
                 rowData:applyScripts(tab, row)
             end
         end
     end)
     
+    --set the action for three ABXY buttons in a separate function
+    Helper.setButtonScript(menu, nil, menu.buttonTable, 1, 2, function()
+        menu.onCloseElement()
+    end)
+    
+    Helper.setButtonScript(menu, nil, menu.buttonTable, 1, 4, menu.tradeOffers)
+    
+    Helper.setButtonScript(menu, nil, menu.buttonTable, 1, 6, menu.plotCourse)
+    
     menu.refreshDetailButton()
     
     menu.nowDisplaying = nil
+end
+
+function menu.closeIfDead()
+    if not IsComponentOperational(menu.object) then
+        Helper.closeMenuAndReturn(menu)
+        return false
+    end
+    return true
+end
+
+function menu.tradeOffers()
+    if not menu.closeIfDead() then return end
+    Helper.closeMenuForSubSection(menu, false, "gTrade_offerselect", { 0, 0, nil, nil, nil, menu.object })
+end
+
+function menu.plotCourse()
+    if IsComponentOperational(menu.object) then
+        Helper.closeMenuForSection(menu, false, "gMainNav_select_plotcourse", {menu.object, menu.type, IsSameComponent(GetActiveGuidanceMissionComponent(), menu.object)})
+    else
+        Helper.closeMenuAndReturn(menu)
+    end
 end
 
 function menu.refreshDetailButton(rowData)
@@ -1312,11 +1045,21 @@ function menu.refreshDetailButton(rowData)
     local button = Helper.createButton(Helper.createButtonText(text, "center", Helper.standardFont, 11, 255, 255, 255, 100), nil, false, enabled, 0, 0, 150, 25, nil, Helper.createButtonHotkey("INPUT_STATE_DETAILMONITOR_X", true))
     SetCellContent(menu.buttonTable, button, 1, 8)
     
-    Helper.setButtonScript(menu, nil, menu.buttonTable, 1, 8, function() obj:onDetailButtonPress() end)
+    Helper.setButtonScript(menu, nil, menu.buttonTable, 1, 8, function()
+        if IsComponentOperational(menu.object) then
+            obj:onDetailButtonPress()
+        end
+    end)
 end
 
 menu.updateInterval = 0.1
 function menu.onUpdate()
+    if menu.nowDisplaying then
+        DebugError("Error detected while displaying menu!")
+        menu.updateInterval = 3600
+        return
+    end
+    
     for k, v in pairs(menu.categories) do
         if v.updateInterval and v.update and v.visible then
             local nextUpd = v.nextUpdate or 0
@@ -1362,6 +1105,10 @@ function menu.onRowChanged(row, rowData, tab)
     if menu.ignoreRowChange > 0 then
         --DebugError("False row change")
         menu.ignoreRowChange = menu.ignoreRowChange - 1
+        return
+    end
+    
+    if not (IsComponentOperational(menu.object) or IsComponentConstruction(menu.object)) then
         return
     end
     
@@ -1411,6 +1158,7 @@ function menu.onSelectionChanged()
 end
 
 function menu.cleanup()
+    UnregisterAddonBindings("ego_detailmonitor")
 end
 
 init()
