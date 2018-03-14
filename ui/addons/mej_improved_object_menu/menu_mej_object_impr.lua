@@ -104,6 +104,43 @@ end
 
 menu.categories = {}
 
+function menu.registerCategory(name)
+    local cat = {}
+    setmetatable(cat, {__index = menu.baseCategoryLib})
+    menu.categories[name] = cat
+    return cat
+end
+
+menu.baseCategoryLib = {}
+function menu.baseCategoryLib:addItem(setup, class, ...)
+    local rowsBefore = #setup.rows
+    
+    local rowData = {}
+    rowData.class = class
+    rowData.kind = "regular"
+    rowData.category = self
+    setmetatable(rowData, class.metaTable)
+    
+    if rowData.init then rowData:init() end
+    
+    rowData:display(setup, ...)
+    
+    local rowAdded = false
+    for i = rowsBefore, #setup.rows do
+        if menu.rowDataMap == rowData then
+            rowAdded = true
+            break
+        end
+    end
+    
+    if rowAdded then
+        table.insert(self.rows, rowData)
+        return rowData
+    else
+        return nil
+    end
+end
+
 menu.categories.general = {}
 local catGeneral = menu.categories.general
 catGeneral.header = ReadText(1001, 1111)
@@ -127,7 +164,7 @@ local catCargo = menu.categories.cargo
 catCargo.visible = false
 catCargo.enabled = false
 catCargo.extended = true
-catCargo.headerColSpans = {3, 2}
+catCargo.headerColSpans = {2, 3}
 catCargo.headerCells = {"", ""}
 catCargo.customHeader = true
 function catCargo:init()
@@ -168,13 +205,16 @@ function catCargo:init()
     
     self.unit = " " .. ReadText(1001, 110)
     
+    self.owner = GetComponentData(menu.object, "owner")
+    self.zoneOwner = GetComponentData(GetComponentData(menu.object, "zoneid"), "owner")
+    
     if self.visible then
         local sep = "\27Z -- \27X"
         -- local mainHeader = ReadText(1001, 1400) .. sep .. amountString .. "/" .. capacityString .. self.unit .. sep .. wareCount .. " " .. (wareCount == 1 and ReadText(1001, 45) or ReadText(1001, 46))
         
         local amountString = Helper.unlockInfo(self.amountKnown, ConvertIntegerString(stored, true, 4, true))
         local capacityString = Helper.unlockInfo(self.capacityKnown, ConvertIntegerString(cap, true, 4, true))
-        self.headerCells[1] = ReadText(1001, 1400) .. sep .. amountString .. "/" .. capacityString .. self.unit
+        self.headerCells[1] = --[[ReadText(1001, 1400) .. sep .. ]] amountString .. "/" .. capacityString .. self.unit
         
         local hasLimits = self.products and next(self.products)
         self.headerCells[2] = Helper.createFontString(ReadText(1001, 20) .. (hasLimits and " / " .. ReadText(1001, 1127) or ""), false, "right")
@@ -223,6 +263,10 @@ end
 function catCargo:onDetailButtonPress()
     Helper.closeMenuForSubSection(menu, false, "gMain_objectStorage", { 0, 0, menu.object })
 end
+function catCargo:cleanup()
+    self.rawStorage = nil
+    self.storageSummary = nil
+end
 
 menu.categories.crew = {}
 local catCrew = menu.categories.crew
@@ -230,6 +274,14 @@ catCrew.header = ReadText(1001, 1108)
 catCrew.visible = true
 catCrew.enabled = false
 catCrew.extended = true
+catCrew.typeOrdering = {
+    manager = 1,
+    commander = 2,
+    pilot = 3,
+    defencecontrol = 4,
+    engineer = 5,
+    architect = 6
+}
 function catCrew:init()
     self.npcs = GetNPCs(menu.object)
     
@@ -241,6 +293,30 @@ function catCrew:init()
     end
     table.insert(self.controlEntities, menu.buildingArchitect)
     
+    table.sort(self.controlEntities, function(a, b)
+        local aType, bType = GetComponentData(a, "typestring"), GetComponentData(b, "typestring")
+        local aIndex, bIndex = self.typeOrdering[aType], self.typeOrdering[bType]
+        
+        --if both types are sorted, put them in that order
+        if aIndex and bIndex then
+            DebugError(aType .. " and " .. bType .. " are both sorted")
+            return aIndex < bIndex
+        end
+        
+        DebugError(aType .. ", " .. bType .. ": only one is sorted")
+        --if only one type is sorted, the npc with the unsorted type goes at the end
+        if not aIndex then return false end
+        if not bIndex then return true end
+        
+        --if neither types are sorted, sort the types in alphabetical order
+        DebugError("Neither " .. aType .. " nor " .. bType .. " is sorted")
+        return aType < bType
+    end)
+    
+    for k, npc in ipairs(self.controlEntities) do
+        DebugError(GetComponentData(npc, "typestring"))
+    end
+    
     self.visible = menu.type ~= "block" and not menu.isPlayerShip
     self.enabled = #self.npcs > 0
     self.namesKnown = IsInfoUnlockedForPlayer(menu.object, "operator_name")
@@ -251,6 +327,10 @@ function catCrew:display(setup)
     for k, npc in pairs(self.controlEntities) do
         addRowByClass(setup, self, menu.rowClasses.npc, npc)
     end
+end
+function catCrew:cleanup()
+    self.npcs = nil
+    self.controlEntities = nil
 end
 
 menu.categories.production = {}
@@ -271,6 +351,9 @@ function catProd:display(setup)
             addRowByClass(setup, self, menu.rowClasses.production, v)
         end
     end
+end
+function catProd:cleanup()
+    self.modules = nil
 end
 
 menu.categories.arms = {}
@@ -329,6 +412,19 @@ function catArms:collectData(isUpdate)
         self.defStatus = self.defStatus + self.fixedTurrets.operational + self.upgrades.totaloperational
         self.estimated = self.fixedTurrets.estimated or self.upgrades.estimated
     end
+    
+    if not menu.isPlayerShip then
+        local numMissiles = C.GetNumAmmoStorage(ConvertIDTo64Bit(menu.object), "missile")
+        local missiles = ffi.new("AmmoData[?]", numMissiles)
+        numMissiles = C.GetAmmoStorage(missiles, numMissiles, ConvertIDTo64Bit(menu.object), "missile")
+        
+        self.ammo = {}
+        for i = 0, numMissiles-1 do
+            missiles[i].ware = ffi.string(missiles[i].ware)
+            missiles[i].macro = ffi.string(missiles[i].macro)
+            self.ammo[missiles[i].ware] = missiles[i]
+        end
+    end
 end
 
 function catArms:init()
@@ -358,6 +454,7 @@ end
 function catArms:display(setup)
     self.upgradeRows = {}
     self.fixedTurretRows = {}
+    self.ammoRows = {}
     if not menu.isPlayerShip then
         for ut, upgrade in Helper.orderedPairs(self.upgrades) do
             if type(upgrade) == "table" and upgrade.total > 0 then
@@ -378,6 +475,11 @@ function catArms:display(setup)
         end
         addRowByClass(setup, self, menu.rowClasses.weapon, weapon, ffiMod)
     end
+    if not menu.isPlayerShip then
+        for k, ammo in pairs(self.ammo) do
+            self.ammoRows[ammo.ware] = addRowByClass(setup, self, menu.rowClasses.ammo, ammo)
+        end
+    end
 end
 catArms.updateInterval = 2
 function catArms:update()
@@ -394,6 +496,21 @@ function catArms:update()
             row:updateVal(turret)
         end
     end
+    for ware, row in pairs(self.ammoRows) do
+        if self.ammo[ware] then
+            row:updateVal(self.ammo[ware])
+        end
+    end
+end
+function catArms:cleanup()
+    self.upgrades = nil
+    self.fixedTurrets = nil
+    self.armament = nil
+    self.ammo = nil
+    
+    self.upgradeRows = nil
+    self.fixedTurretRows = nil
+    self.ammoRows = nil
 end
 
 menu.categories.shoppingList = {}
@@ -431,6 +548,9 @@ function catShoppingList:display(setup)
     for k, item in pairs(self.shoppingList) do
         addRowByClass(setup, self, menu.rowClasses.shoppingList, item, k)
     end
+end
+function catShoppingList:cleanup()
+    self.shoppingList = nil
 end
 
 menu.categories.units = {}
@@ -489,14 +609,12 @@ function catUnits:init()
         self.header = mainHeader
     end
 end
-
 function catUnits:aggregateByMacro()
     self.unitsByMacro = {}
     for k, unit in ipairs(self.units) do
         self.unitsByMacro[unit.macro] = unit
     end
 end
-
 function catUnits:display(setup)
     for k, unit in ipairs(self.units) do
         if unit.amount > 0 then
@@ -504,7 +622,6 @@ function catUnits:display(setup)
         end
     end
 end
-
 catUnits.updateInterval = 3
 function catUnits:update()
     if #self.rows == 0 then return end
@@ -519,6 +636,10 @@ function catUnits:update()
             DebugError("No unit with that macro")
         end
     end
+end
+function catUnits:cleanup()
+    self.units = nil
+    self.unitsByMacro = nil
 end
 
 menu.categories.playerUpgrades = {}
@@ -573,7 +694,6 @@ function catPlayerUpgrades:getSoftwareSlots(upgrades)
     end
     return totalSlots
 end
-
 function catPlayerUpgrades:displayCat(setup, cat)
     local upgrades = self.upgradesByCat[cat]
     local factor = cat == "engine" and 0.5 or 1
@@ -603,11 +723,13 @@ function catPlayerUpgrades:displayCat(setup, cat)
 		}, nil, {1, #menu.selectColWidths-1})
     end
 end
-
 function catPlayerUpgrades:display(setup)
     for k, cat in pairs(self.upgradesByCat) do
         self:displayCat(setup, k)
     end
+end
+function catPlayerUpgrades:cleanup()
+    self.upgradesByCat = nil
 end
     
 --row classes start here
@@ -1159,6 +1281,36 @@ end
 
 function menu.cleanup()
     UnregisterAddonBindings("ego_detailmonitor")
+    
+    for k, cat in pairs(menu.categories) do
+        cat.rows = nil
+        if cat.cleanup then
+            cat:cleanup()
+        end
+    end
+    
+    menu.selectColWidths = nil
+    menu.unlocked = nil
+    menu.playerShip = nil
+    menu.isPlayerShip = nil
+    menu.isPlayerOwned = nil
+    menu.type = nil
+    menu.title = nil
+    menu.container = nil
+    menu.isBigShip = nil
+    menu.buildingModule = nil
+    menu.buildingContainer = nil
+    menu.buildingArchitect = nil
+    menu.category = nil
+    menu.holomapColor = nil
+    menu.buttonTableSpacerWidth = nil
+    menu.buttonTableButtonWidth = nil
+    menu.statusMessage = nil
+    menu.nextRows = nil
+    menu.tableNames = nil
+    menu.namedTables = nil
+    menu.rowDataColumns = nil
+    menu.objNameColor = nil
 end
 
 init()

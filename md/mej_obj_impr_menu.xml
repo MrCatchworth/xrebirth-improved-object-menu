@@ -21,5 +21,20 @@
                 </do_elseif>
             </actions>
         </cue>
+        <cue name="MeJ_UIEventListenter" instantiate="true" namespace="this">
+            <conditions>
+                <event_ui_triggered screen="'MeJ_ImprovedObjectMenu'" control="''" />
+            </conditions>
+            <actions>
+                <set_value name="$listConcat" exact="''" />
+                <do_all exact="event.param3.count" counter="$i">
+                    <set_value name="$listConcat" exact="$listConcat + event.param3.{$i}" />
+                    <do_if value="$i lt event.param3.count">
+                        <set_value name="$listConcat" exact="$listConcat + ', '" />
+                    </do_if>
+                </do_all>
+                <debug_text text="'Jimble object menu opened with parameter ' + $listConcat" filter="general" />
+            </actions>
+        </cue>
     </cues>
 </mdscript>

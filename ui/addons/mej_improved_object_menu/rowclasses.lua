@@ -156,11 +156,16 @@ function rcWare:getContent(ware)
     
     self.cycleAmount = self.category.productCycleAmounts[ware.ware] and self.category.productCycleAmounts[ware.ware] + 1 or 0
     
+    local color = menu.white
+    if zoneowner and IsWareIllegalTo(ware.ware, self.category.owner, self.category.zoneOwner) then
+        color = menu.orange
+    end
+    
     local totalVolume = ware.amount * ware.volume
     local icon = GetWareData(ware.ware, "icon")
     return true, {
         Helper.createButton(nil, Helper.createButtonIcon(icon, nil, 255, 255, 255, 100), false, true),
-        ware.name,
+        Helper.createFontString(ware.name, false, "left", color.r, color.g, color.b, color.a),
         self:getWareAmountCell()
         -- Helper.createFontString(ConvertIntegerString(totalVolume, true, 4, true) .. "\27Z" .. self.category.unit, false, "right")
     }, nil, {1, 2, 3}
@@ -327,6 +332,28 @@ function rcWeapon:applyScripts(tab, row)
     Helper.setButtonScript(menu, nil, tab, row, 1, function()
         Helper.closeMenuForSubSection(menu, false, "gEncyclopedia_weapon", {0, 0, "weapontypes_primary", self.weapon.macro})
     end)
+end
+
+local rcAmmo = menu.registerRowClass("ammo")
+function rcAmmo:getAmountText()
+    return Helper.unlockInfo(self.category.defStatusKnown, tostring(self.ammo.amount))
+end
+function rcAmmo:getContent(ammo)
+    self.ammo = ammo
+    self.name = GetWareData(ammo.ware, "name")
+    
+    return true, {
+        self.name,
+        self:getAmountText()
+    }, nil, {4, 2}
+end
+function rcAmmo:updateVal(newVal)
+    if self.category.defStatusKnown then
+        if newVal.amount ~= self.ammo.amount then
+            self.ammo.amount = newVal.amount
+            SetCellContent(self.tab, self:getAmountText(), self.row, 5)
+        end
+    end
 end
 
 local rcProduction = menu.registerRowClass("production")
