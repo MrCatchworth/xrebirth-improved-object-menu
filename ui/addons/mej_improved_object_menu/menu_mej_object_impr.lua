@@ -719,6 +719,28 @@ end
 function catPlayerUpgrades:cleanup()
     self.upgradesByCat = nil
 end
+
+local catSubordinates = menu.registerCategory("subordinates")
+catSubordinates.visible = true
+catSubordinates.enabled = true
+catSubordinates.extended = true
+function catSubordinates:init()
+    self.visible = IsInfoUnlockedForPlayer(menu.object, "managed_ships")
+    if not self.visible then return end
+    
+    self.ships = GetSubordinates(menu.object)
+    if #self.ships == 0 then
+        self.visible = false
+        return
+    end
+    
+    self.header = #self.ships .. " " .. (#self.ships == 1 and ReadText(1001, 5) or ReadText(1001, 6))
+end
+function catSubordinates:display(setup)
+    for k, ship in pairs(self.ships) do
+        self:addItem(setup, menu.rowClasses.subordinate, ship)
+    end
+end
     
 --row classes start here
 --===================================================================
@@ -737,21 +759,26 @@ function menu.registerRowClass(name)
     return rc
 end
 
-local rowClassLib = loadfile("extensions/mej_improved_object_menu/ui/addons/mej_improved_object_menu/rowclasses.lua")
-rowClassLib(menu)
+local rowClassLib, rowClassLibError = loadfile("extensions/mej_improved_object_menu/ui/addons/mej_improved_object_menu/rowclasses.lua")
+if rowClassLib then
+    rowClassLib(menu)
+else
+    error("Error loading row class file: " .. rowClassLibError)
+end
 
 menu.categoryScheme = {
     left = {
         menu.categories.general,
         menu.categories.crew,
-        menu.categories.arms
+        menu.categories.subordinates
     },
     right = {
         menu.categories.production,
         menu.categories.shoppingList,
         menu.categories.cargo,
         menu.categories.units,
-        menu.categories.playerUpgrades
+        menu.categories.playerUpgrades,
+        menu.categories.arms
     }
 }
 

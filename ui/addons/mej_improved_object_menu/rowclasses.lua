@@ -138,10 +138,10 @@ function rcWare:getWareAmountCell()
                 mot = ReadText(1001, 1126)
             end
         end
-        
-        if self.limit > 0 then
-            amountString = amountString .. " / " .. ConvertIntegerString(self.limit, true, 4, true)
-        end
+    end
+    
+    if menu.isPlayerOwned and self.limit > 0 then
+        amountString = amountString .. " / " .. ConvertIntegerString(self.limit, true, 4, true)
     end
     
     return Helper.createFontString(amountString, false, "right", 255, 255, 255, 100, nil, nil, nil, nil, nil, nil, nil, mot)
@@ -150,7 +150,7 @@ function rcWare:getNameColor()
     if self.category.zoneOwner and IsWareIllegalTo(self.ware.ware, self.category.owner, self.category.zoneOwner) then
         return menu.orange
     elseif self.ware.amount == 0 then
-        return menu.grey
+        return menu.lightGrey
     else
         return menu.white
     end
@@ -202,7 +202,11 @@ end
 
 local rcNpc = menu.registerRowClass("npc")
 function rcNpc:getCommandString()
-
+    local accountString
+    if menu.isPlayerOwned and (self.typeString == "manager" or self.typeString == "architect") then
+        accountString = "\27W" .. ConvertMoneyString(GetAccountData(self.npc, "money"), false, true, 5, true) .. " " .. ReadText(1001, 101) .. "\27X "
+    end
+    
     if self.typeString == "engineer" then
         local action, param = GetComponentData(self.npc, "aicommandaction", "aicommandactionparam")
         return string.format(action, IsComponentClass(param, "component") and GetComponentData(param, "name") or "")
@@ -211,9 +215,9 @@ function rcNpc:getCommandString()
         local buildAnchor = GetBuildAnchor(GetContextByClass(self.npc, "container"))
 		if buildAnchor and GetCurrentBuildSlot(buildAnchor) then
 			local _, _, progress = GetCurrentBuildSlot(buildAnchor)
-			return string.format(ReadText(1001, 4218), GetComponentData(buildAnchor, "name")) .. " (" .. math.floor(progress) .. "%)"
+			return accountString .. string.format(ReadText(1001, 4218), GetComponentData(buildAnchor, "name")) .. " (" .. math.floor(progress) .. "%)"
 		else
-			return ReadText(1001, 4223)
+			return accountString .. ReadText(1001, 4223)
 		end
         
     elseif self.typeString == "defencecontrol" then
@@ -226,7 +230,7 @@ function rcNpc:getCommandString()
 		end
         
     elseif self.typeString == "manager" then
-        return string.format(ReadText(1001, 4204), GetComponentData(GetContextByClass(self.npc, "container"), "name"))
+        return accountString .. string.format(ReadText(1001, 4204), GetComponentData(GetContextByClass(self.npc, "container"), "name"))
         
     else
         local command, param, action, actionParam = GetComponentData(self.npc, "aicommand", "aicommandparam", "aicommandaction", "aicommandactionparam")
@@ -744,4 +748,55 @@ function rcPlayerUpgrade:display(setup, upgrade, factor)
         upgrade.name,
         Helper.createFontString(factor * upgrade.operational, false, "right")
     }, self, {1, 4, 1})
+end
+
+local rcSubordinate = menu.registerRowClass("subordinate")
+function rcSubordinate:getCommandString()
+    if not self.pilot then return end
+    
+    local command, param = GetComponentData(self.pilot, "aicommand", "aicommandparam")
+    
+    param = IsComponentClass(param, "component") and GetComponentData(param, "name") or ""
+    
+    return string.format(command, param)
+end
+function rcSubordinate:getMainString()
+    if self.commandString then
+        return self.name .. " \27Z" .. self.commandString
+    else
+        return self.name
+    end
+end
+function rcSubordinate:display(setup, ship)
+    self.ship = ship
+    
+    local isPlayer, isEnemy, name, pilot = GetComponentData(ship, "isplayerowned", "isenemy", "name", "pilot")
+    
+    self.name, self.pilot = name, pilot
+    
+    if isPlayer then
+        self.color = menu.holomapColor.playerColor
+    elseif isEnemy then
+        self.color = menu.holomapColor.enemyColor
+    else
+        self.color = menu.holomapColor.friendColor
+    end
+    
+    self.commandString = self:getCommandString()
+    
+    self.row = setup:addRow(true, {
+        "",
+        Helper.createFontString(self:getMainString(), false, "left", self.color.r, self.color.g, self.color.b, self.color.a)
+    }, self, {1, 5})
+end
+rcSubordinate.updateInterval = 5
+function rcSubordinate:update()
+    if not IsComponentOperational(self.ship) then return end
+    
+    self.name, self.pilot = GetComponentData(self.ship, "name", "pilot")
+    local nextCommand = self:getCommandString()
+    if nextCommand ~= self.commandString then
+        self.commandString = nextCommand
+        Helper.updateCellText(self.tab, self.row, 2, self:getMainString())
+    end
 end
