@@ -55,6 +55,9 @@ local menu = {
 	white = { r = 255, g = 255, b = 255, a = 100 },
 	orange = { r = 255, g = 192, b = 0, a = 100 },
     shieldColor = { r = 0, g = 192, b = 255 , a = 100 },
+    grey = { r = 128, g = 128, b = 128, a = 100 },
+    lightGrey = { r = 170, g = 170, b = 170, a = 100 },
+    statusMsgColor = { r = 129, g = 160, b = 182, a = 100 },
     
     selectTableHeight = 535
 }
@@ -75,28 +78,6 @@ function menu.getMultiColWidth(startIndex, endIndex)
     end
     
     return width
-end
-
-local function addRowByClass(setup, cat, rowClass, ...)
-    local rowData = {}
-    rowData.class = rowClass
-    rowData.kind = "regular"
-    rowData.category = cat
-    setmetatable(rowData, rowClass.metaTable)
-    
-    if rowData.init then rowData:init() end
-    
-    local rowProps = {rowData:getContent(...)}
-    
-    if rowProps and #rowProps > 0 then
-        rowProps[3] = rowData
-        setup:addRow(unpack(rowProps))
-        rowData.row = #setup.rows
-        
-        table.insert(cat.rows, rowData)
-    end
-    
-    return rowData
 end
 
 --menu categories start here
@@ -121,13 +102,15 @@ function menu.baseCategoryLib:addItem(setup, class, ...)
     rowData.category = self
     setmetatable(rowData, class.metaTable)
     
+    -- DebugError("Adding category item of class " .. class.className)
+    
     if rowData.init then rowData:init() end
     
     rowData:display(setup, ...)
     
     local rowAdded = false
     for i = rowsBefore, #setup.rows do
-        if menu.rowDataMap == rowData then
+        if menu.rowDataMap[i] == rowData then
             rowAdded = true
             break
         end
@@ -141,8 +124,7 @@ function menu.baseCategoryLib:addItem(setup, class, ...)
     end
 end
 
-menu.categories.general = {}
-local catGeneral = menu.categories.general
+local catGeneral = menu.registerCategory("general")
 catGeneral.header = ReadText(1001, 1111)
 catGeneral.visible = true
 catGeneral.enabled = true
@@ -150,17 +132,16 @@ catGeneral.extended = true
 function catGeneral:init()
 end
 function catGeneral:display(setup)
-    addRowByClass(setup, self, menu.rowClasses.name)
-    addRowByClass(setup, self, menu.rowClasses.faction)
-    addRowByClass(setup, self, menu.rowClasses.location)
-    addRowByClass(setup, self, menu.rowClasses.hullShield, "hull")
-    addRowByClass(setup, self, menu.rowClasses.hullShield, "shield")
-    addRowByClass(setup, self, menu.rowClasses.jumpdrive)
-    addRowByClass(setup, self, menu.rowClasses.fuel)
+    self:addItem(setup, menu.rowClasses.name)
+    self:addItem(setup, menu.rowClasses.faction)
+    self:addItem(setup, menu.rowClasses.location)
+    self:addItem(setup, menu.rowClasses.hullShield, "hull")
+    self:addItem(setup, menu.rowClasses.hullShield, "shield")
+    self:addItem(setup, menu.rowClasses.jumpdrive)
+    self:addItem(setup, menu.rowClasses.fuel)
 end
 
-menu.categories.cargo = {}
-local catCargo = menu.categories.cargo
+local catCargo = menu.registerCategory("cargo")
 catCargo.visible = false
 catCargo.enabled = false
 catCargo.extended = true
@@ -224,7 +205,7 @@ function catCargo:init()
 end
 function catCargo:display(setup)
     for ware, data in Helper.orderedPairsByWareName(self.storageSummary) do
-        self.rowsByWare[ware] = addRowByClass(setup, self, menu.rowClasses.ware, data)
+        self.rowsByWare[ware] = self:addItem(setup, menu.rowClasses.ware, data)
     end
 end
 function catCargo:aggregateStorage(rawStorage)
@@ -235,6 +216,15 @@ function catCargo:aggregateStorage(rawStorage)
                 cargo[ware.ware] = ware
             else
                 cargo[ware.ware].amount = cargo[ware.ware].amount + ware.amount
+            end
+        end
+    end
+    
+    if menu.isPlayerOwned then
+        --add rows for empty resources
+        for k, ware in pairs(GetComponentData(menu.object, "pureresources")) do
+            if not cargo[ware] then
+                cargo[ware] = {ware = ware, amount = 0, name = GetWareData(ware, "name"), volume = 1}
             end
         end
     end
@@ -266,10 +256,10 @@ end
 function catCargo:cleanup()
     self.rawStorage = nil
     self.storageSummary = nil
+    self.rowsByWare = nil
 end
 
-menu.categories.crew = {}
-local catCrew = menu.categories.crew
+local catCrew = menu.registerCategory("crew")
 catCrew.header = ReadText(1001, 1108)
 catCrew.visible = true
 catCrew.enabled = false
@@ -283,6 +273,9 @@ catCrew.typeOrdering = {
     architect = 6
 }
 function catCrew:init()
+    self.visible = menu.type ~= "block" and not menu.isPlayerShip
+    if not self.visible then return end
+    
     self.npcs = GetNPCs(menu.object)
     
     self.controlEntities = {}
@@ -299,33 +292,34 @@ function catCrew:init()
         
         --if both types are sorted, put them in that order
         if aIndex and bIndex then
-            DebugError(aType .. " and " .. bType .. " are both sorted")
+            -- DebugError(aType .. " and " .. bType .. " are both sorted")
             return aIndex < bIndex
         end
         
-        DebugError(aType .. ", " .. bType .. ": only one is sorted")
+        -- DebugError(aType .. ", " .. bType .. ": only one is sorted")
         --if only one type is sorted, the npc with the unsorted type goes at the end
         if not aIndex then return false end
         if not bIndex then return true end
         
         --if neither types are sorted, sort the types in alphabetical order
-        DebugError("Neither " .. aType .. " nor " .. bType .. " is sorted")
+        -- DebugError("Neither " .. aType .. " nor " .. bType .. " is sorted")
         return aType < bType
     end)
     
+    --[[
     for k, npc in ipairs(self.controlEntities) do
         DebugError(GetComponentData(npc, "typestring"))
     end
+    ]]
     
-    self.visible = menu.type ~= "block" and not menu.isPlayerShip
     self.enabled = #self.npcs > 0
     self.namesKnown = IsInfoUnlockedForPlayer(menu.object, "operator_name")
     self.commandsKnown = IsInfoUnlockedForPlayer(menu.object, "operator_commands")
 end
 function catCrew:display(setup)
-    addRowByClass(setup, self, menu.rowClasses.personnel)
+    self:addItem(setup, menu.rowClasses.personnel)
     for k, npc in pairs(self.controlEntities) do
-        addRowByClass(setup, self, menu.rowClasses.npc, npc)
+        self:addItem(setup, menu.rowClasses.npc, npc)
     end
 end
 function catCrew:cleanup()
@@ -333,8 +327,7 @@ function catCrew:cleanup()
     self.controlEntities = nil
 end
 
-menu.categories.production = {}
-local catProd = menu.categories.production
+local catProd = menu.registerCategory("production")
 catProd.header = ReadText(1001, 1106)
 catProd.visible = false
 catProd.enabled = false
@@ -348,7 +341,7 @@ end
 function catProd:display(setup)
     for k, v in pairs(self.modules) do
         if IsComponentOperational(v) then
-            addRowByClass(setup, self, menu.rowClasses.production, v)
+            self:addItem(setup, menu.rowClasses.production, v)
         end
     end
 end
@@ -356,13 +349,11 @@ function catProd:cleanup()
     self.modules = nil
 end
 
-menu.categories.arms = {}
-local catArms = menu.categories.arms
+local catArms = menu.registerCategory("arms")
 catArms.header = ReadText(1001, 1105)
 catArms.visible = false
 catArms.enabled = false
 catArms.extended = true
-
 -- return true if isUpdate is set, and the operationals have changed
 function catArms:collectData(isUpdate)
     self.upgrades = GetAllUpgrades(menu.object, false)
@@ -420,9 +411,9 @@ function catArms:collectData(isUpdate)
         
         self.ammo = {}
         for i = 0, numMissiles-1 do
-            missiles[i].ware = ffi.string(missiles[i].ware)
-            missiles[i].macro = ffi.string(missiles[i].macro)
-            self.ammo[missiles[i].ware] = missiles[i]
+            local ware = ffi.string(missiles[i].ware)
+            local amount = missiles[i].amount
+            self.ammo[ware] = {ware = ware, amount = amount}
         end
     end
 end
@@ -458,12 +449,12 @@ function catArms:display(setup)
     if not menu.isPlayerShip then
         for ut, upgrade in Helper.orderedPairs(self.upgrades) do
             if type(upgrade) == "table" and upgrade.total > 0 then
-                self.upgradeRows[ut] = addRowByClass(setup, self, menu.rowClasses.upgrade, upgrade, self.estimated)
+                self.upgradeRows[ut] = self:addItem(setup, menu.rowClasses.upgrade, upgrade, self.estimated)
             end
         end
         for macro, turret in pairs(self.fixedTurrets) do
             if type(turret) == "table" and turret.operational > 0 then
-                self.fixedTurretRows[macro] = addRowByClass(setup, self, menu.rowClasses.upgrade, turret, self.fixedTurrets.estimated)
+                self.fixedTurretRows[macro] = self:addItem(setup, menu.rowClasses.upgrade, turret, self.fixedTurrets.estimated)
             end
         end
     end
@@ -473,11 +464,11 @@ function catArms:display(setup)
         if not retVal then
             ffiMod = nil
         end
-        addRowByClass(setup, self, menu.rowClasses.weapon, weapon, ffiMod)
+        self:addItem(setup, menu.rowClasses.weapon, weapon, ffiMod)
     end
     if not menu.isPlayerShip then
-        for k, ammo in pairs(self.ammo) do
-            self.ammoRows[ammo.ware] = addRowByClass(setup, self, menu.rowClasses.ammo, ammo)
+        for ware, ammo in pairs(self.ammo) do
+            self.ammoRows[ware] = self:addItem(setup, menu.rowClasses.ammo, ammo)
         end
     end
 end
@@ -513,8 +504,7 @@ function catArms:cleanup()
     self.ammoRows = nil
 end
 
-menu.categories.shoppingList = {}
-local catShoppingList = menu.categories.shoppingList
+local catShoppingList = menu.registerCategory("shoppingList")
 catShoppingList.header = ReadText(1001, 1105)
 catShoppingList.visible = false
 catShoppingList.enabled = false
@@ -546,15 +536,14 @@ function catShoppingList:init()
 end
 function catShoppingList:display(setup)
     for k, item in pairs(self.shoppingList) do
-        addRowByClass(setup, self, menu.rowClasses.shoppingList, item, k)
+        self:addItem(setup, menu.rowClasses.shoppingList, item, k)
     end
 end
 function catShoppingList:cleanup()
     self.shoppingList = nil
 end
 
-menu.categories.units = {}
-local catUnits = menu.categories.units
+local catUnits = menu.registerCategory("units")
 catUnits.visible = false
 catUnits.enabled = true
 catUnits.extended = true
@@ -618,7 +607,7 @@ end
 function catUnits:display(setup)
     for k, unit in ipairs(self.units) do
         if unit.amount > 0 then
-            addRowByClass(setup, self, menu.rowClasses.unit, unit)
+            self:addItem(setup, menu.rowClasses.unit, unit)
         end
     end
 end
@@ -642,8 +631,7 @@ function catUnits:cleanup()
     self.unitsByMacro = nil
 end
 
-menu.categories.playerUpgrades = {}
-local catPlayerUpgrades = menu.categories.playerUpgrades
+local catPlayerUpgrades = menu.registerCategory("playerUpgrades")
 catPlayerUpgrades.visible = false
 catPlayerUpgrades.enabled = true
 catPlayerUpgrades.extended = true
@@ -710,7 +698,7 @@ function catPlayerUpgrades:displayCat(setup, cat)
     for ut, upgrade in Helper.orderedPairs(upgrades) do
         if not (ut == "totaltotal" or ut == "totalfree" or ut == "totaloperational" or ut == "totalconstruction" or ut == "estimated") then
             if upgrade.operational ~= 0 then
-                addRowByClass(setup, self, menu.rowClasses.playerUpgrade, upgrade, factor)
+                self:addItem(setup, menu.rowClasses.playerUpgrade, upgrade, factor)
                 displayed = true
             end
         end
@@ -735,10 +723,13 @@ end
 --row classes start here
 --===================================================================
 
+menu.baseItemLib = {}
+
 menu.rowClasses = {}
 
 function menu.registerRowClass(name)
     local rc = {}
+    setmetatable(rc, {__index = menu.baseItemLib})
     menu.rowClasses[name] = rc
     rc.metaTable = {__index = rc}
     rc.className = name
@@ -882,6 +873,11 @@ function menu.onShowMenu()
     local productionColor, buildColor, storageColor, radarColor, dronedockColor, efficiencyColor, defenceColor, playerColor, friendColor, enemyColor, missionColor = GetHoloMapColors()
     menu.holomapColor = { productionColor = productionColor, buildColor = buildColor, storageColor = storageColor, radarColor = radarColor, dronedockColor = dronedockColor, efficiencyColor = efficiencyColor, defenceColor = defenceColor, playerColor = playerColor, friendColor = friendColor, enemyColor = enemyColor, missionColor = missionColor }
     
+    if Helper.largePDA then
+        Helper.standardFontSize = 11
+        Helper.standardTextHeight = 18
+    end
+    
     setupColWidths()
     
     --calculate col widths:
@@ -993,7 +989,7 @@ function menu.displayMenu(isFirstTime)
     }, nil, {1, #menu.selectColWidths-1}, false, Helper.defaultTitleBackgroundColor)
     
     setup:addTitleRow({ 
-        Helper.createFontString(menu.statusMessage, false, "left", 129, 160, 182, 100, Helper.headerRow2Font, Helper.headerRow2FontSize)
+        Helper.createFontString(menu.statusMessage, false, "left", menu.statusMsgColor.r, menu.statusMsgColor.g, menu.statusMsgColor.b, menu.statusMsgColor.a, Helper.headerRow2Font, Helper.headerRow2FontSize)
     }, nil, {#menu.selectColWidths})
     
     local numHeaderRows = #setup.rows
@@ -1137,27 +1133,23 @@ end
 function menu.refreshDetailButton(rowData)
     if not rowData then
         rowData = menu.rowDataColumns[menu.currentColumn][Helper.currentTableRow[menu.currentColumn]]
-        if not rowData then return end
     end
+    
+    local text = "--"
+    local enabled = false
     
     local obj
-    if rowData.kind == "regular" then
-        obj = rowData
-    elseif rowData.kind == "catheader" then
-        obj = rowData.category
-    else
-        return
+    if rowData then
+        if rowData.kind == "regular" then
+            obj = rowData
+        elseif rowData.kind == "catheader" then
+            obj = rowData.category
+        end
     end
     
-    local text, enabled
-    
-    if obj.getDetailButtonProps then
+    if obj and obj.getDetailButtonProps then
         text, enabled = obj:getDetailButtonProps()
-        
         text = TruncateText(text, Helper.standardFont, Helper.standardFontSize, menu.buttonTableButtonWidth)
-    else
-        text = "--"
-        enabled = false
     end
     
     if not menu.nowDisplaying then
@@ -1167,17 +1159,19 @@ function menu.refreshDetailButton(rowData)
     local button = Helper.createButton(Helper.createButtonText(text, "center", Helper.standardFont, 11, 255, 255, 255, 100), nil, false, enabled, 0, 0, 150, 25, nil, Helper.createButtonHotkey("INPUT_STATE_DETAILMONITOR_X", true))
     SetCellContent(menu.buttonTable, button, 1, 8)
     
-    Helper.setButtonScript(menu, nil, menu.buttonTable, 1, 8, function()
-        if IsComponentOperational(menu.object) then
-            obj:onDetailButtonPress()
-        end
-    end)
+    if enabled then
+        Helper.setButtonScript(menu, nil, menu.buttonTable, 1, 8, function()
+            if IsComponentOperational(menu.object) then
+                obj:onDetailButtonPress()
+            end
+        end)
+    end
 end
 
 menu.updateInterval = 0.1
 function menu.onUpdate()
     if menu.nowDisplaying then
-        DebugError("Error detected while displaying menu!")
+        DebugError("Error detected while displaying Improved Object Menu!")
         menu.updateInterval = 3600
         return
     end
@@ -1205,6 +1199,30 @@ function menu.onUpdate()
             end
         end
     end)
+end
+
+function menu.onHotkey(action)
+    if not IsComponentOperational(menu.object) then return end
+    
+    if action == "INPUT_ACTION_ADDON_DETAILMONITOR_C" then
+        if not (menu.type == "station" or menu.type == "ship") then return end
+        if not GetComponentData(menu.object, "caninitiatecomm") then return end
+        
+        local rowData = menu.rowDataColumns[menu.currentColumn][Helper.currentTableRow[menu.currentColumn]]
+        
+        if rowData and rowData.kind == "regular" and rowData.className == "npc" then
+            Helper.closeMenuForSubConversation(menu, false, "default", rowData.npc, menu.object, (not Helper.useFullscreenDetailmonitor()) and "facecopilot" or nil)
+            
+        else
+            local entities = Helper.getSuitableControlEntities(menu.object, true)
+            if #entities == 1 then
+                Helper.closeMenuForSubConversation(menu, false, "default", entities[1], menu.object, (not Helper.useFullscreenDetailmonitor()) and "facecopilot" or nil)
+            else
+                Helper.closeMenuForSubSection(menu, false, "gMain_propertyResult", menu.object)
+            end
+        end
+        
+    end
 end
 
 function menu.updateStatusMessage()
@@ -1288,6 +1306,9 @@ function menu.cleanup()
             cat:cleanup()
         end
     end
+    
+    Helper.standardFontSize = 14
+    Helper.standardTextHeight = 24
     
     menu.selectColWidths = nil
     menu.unlocked = nil

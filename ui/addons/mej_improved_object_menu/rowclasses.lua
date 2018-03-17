@@ -3,11 +3,11 @@ local menu = ...
 local ffi = require("ffi")
 
 local rcName = menu.registerRowClass("name")
-function rcName:getContent()
-    return true, {
+function rcName:display(setup)
+    self.row = setup:addRow(true, {
         "",
         Helper.createFontString(Helper.unlockInfo(menu.unlocked.name, GetComponentData(menu.object, "name")), false, "center", menu.objNameColor.r, menu.objNameColor.g, menu.objNameColor.b, menu.objNameColor.a)
-    }, nil, {1, #menu.selectColWidths-1}
+    }, self, {1, #menu.selectColWidths-1})
 end
 function rcName:getDetailButtonProps()
     local enabled = menu.isPlayerOwned
@@ -20,7 +20,7 @@ function rcName:onDetailButtonPress()
 end
 
 local rcFaction = menu.registerRowClass("faction")
-function rcFaction:getContent()
+function rcFaction:display(setup)
     self.faction = GetComponentData(menu.object, "owner")
     
     if self.faction == "ownerless" then return end
@@ -37,10 +37,10 @@ function rcFaction:getContent()
     
     local facText = GetComponentData(menu.object, "ownername") .. relationColor .. " (" .. sign .. relation .. ")"
     
-    return true, {
+    self.row = setup:addRow(true, {
         "",
         Helper.createFontString(facText, false, "center")
-    }, nil, {1, #menu.selectColWidths-1}
+    }, self, {1, #menu.selectColWidths-1})
 end
 function rcFaction:getDetailButtonProps()
     local text = ReadText(1001, 2400)
@@ -72,7 +72,7 @@ end
 function rcHullShield:getBar()
     return getStatusBar(self.value/self.maximum, Helper.standardTextHeight, menu.getMultiColWidth(4, 6), self.barColor)
 end
-function rcHullShield:getContent(property)
+function rcHullShield:display(setup, property)
     self.property = property
     
     local value, maximum, pct = self:getVals()
@@ -82,7 +82,7 @@ function rcHullShield:getContent(property)
     
     self.value, self.maximum, self.pct = value, maximum, pct
     
-    return true, {Helper.createFontString(self:getText(), false, "right"), self:getBar()}, nil, {3, 3}
+    self.row = setup:addRow(true, {Helper.createFontString(self:getText(), false, "right"), self:getBar()}, self, {3, 3})
 end
 function rcHullShield:update(tab, row)
     local val, maximum, pct = self:getVals()
@@ -96,7 +96,7 @@ function rcHullShield:update(tab, row)
 end
 
 local rcFuel = menu.registerRowClass("fuel")
-function rcFuel:getContent()
+function rcFuel:display(setup)
     local fuelAmount = GetComponentData(menu.object, "cargo").fuelcells or 0
     local fuelCapacity = GetWareCapacity(menu.object, "fuelcells")
     
@@ -111,10 +111,10 @@ function rcFuel:getContent()
         fuelText = "\27R" .. fuelText
     end
     
-    return true, {
+    self.row = setup:addRow(true, {
         Helper.createFontString(ReadText(20205, 800), false, "right"),
         fuelText
-    }, nil, {3, 3}
+    }, self, {3, 3})
 end
 
 local rcWare = menu.registerRowClass("ware")
@@ -122,9 +122,10 @@ function rcWare:getWareAmountCell()
     local mot
     local amountString = ConvertIntegerString(self.ware.amount, true, 4, true)
     
-    --don't display any limit or warning info for non-player stations
-    if menu.isPlayerOwned then
-    
+    --decide the color of the amount, and whether there should be any "x / y" bit
+    if self.ware.amount == 0 then
+            amountString = "\27Z" .. amountString .. "\27X"
+    elseif menu.isPlayerOwned then
         self.isFull = next(self.category.productCycleAmounts) and (GetWareCapacity(menu.object, self.ware.ware, false) <= self.cycleAmount or (self.limit - self.cycleAmount) < self.ware.amount)
         if self.isFull then
             if self.cycleAmount > 0 then
@@ -145,7 +146,16 @@ function rcWare:getWareAmountCell()
     
     return Helper.createFontString(amountString, false, "right", 255, 255, 255, 100, nil, nil, nil, nil, nil, nil, nil, mot)
 end
-function rcWare:getContent(ware)
+function rcWare:getNameColor()
+    if self.category.zoneOwner and IsWareIllegalTo(self.ware.ware, self.category.owner, self.category.zoneOwner) then
+        return menu.orange
+    elseif self.ware.amount == 0 then
+        return menu.grey
+    else
+        return menu.white
+    end
+end
+function rcWare:display(setup, ware)
     self.ware = ware
     
     local limit = 0
@@ -156,19 +166,16 @@ function rcWare:getContent(ware)
     
     self.cycleAmount = self.category.productCycleAmounts[ware.ware] and self.category.productCycleAmounts[ware.ware] + 1 or 0
     
-    local color = menu.white
-    if zoneowner and IsWareIllegalTo(ware.ware, self.category.owner, self.category.zoneOwner) then
-        color = menu.orange
-    end
+    local color = self:getNameColor()
     
     local totalVolume = ware.amount * ware.volume
     local icon = GetWareData(ware.ware, "icon")
-    return true, {
+    self.row = setup:addRow(true, {
         Helper.createButton(nil, Helper.createButtonIcon(icon, nil, 255, 255, 255, 100), false, true),
         Helper.createFontString(ware.name, false, "left", color.r, color.g, color.b, color.a),
         self:getWareAmountCell()
         -- Helper.createFontString(ConvertIntegerString(totalVolume, true, 4, true) .. "\27Z" .. self.category.unit, false, "right")
-    }, nil, {1, 2, 3}
+    }, self, {1, 2, 3})
 end
 function rcWare:applyScripts(tab, row)
     Helper.setButtonScript(menu, nil, tab, row, 1, function()
@@ -177,33 +184,100 @@ function rcWare:applyScripts(tab, row)
     end)
 end
 function rcWare:updateAmount(newAmount)
+    -- DebugError("Update amount of " .. self.ware.name)
     if self.ware.amount ~= newAmount then
         DebugError(self.ware.name .. " has changed from " .. self.ware.amount .. " to " .. newAmount)
+        
+        local nameNeedsUpdate = self.ware.amount == 0 or newAmount == 0
+        
         self.ware.amount = newAmount
+        
         SetCellContent(self.tab, self:getWareAmountCell(), self.row, 4)
+        
+        if nameNeedsUpdate then
+            Helper.updateCellText(self.tab, self.row, 2, self.ware.name, self:getNameColor())
+        end
     end
 end
 
 local rcNpc = menu.registerRowClass("npc")
-function rcNpc:getContent(npc)
+function rcNpc:getCommandString()
+
+    if self.typeString == "engineer" then
+        local action, param = GetComponentData(self.npc, "aicommandaction", "aicommandactionparam")
+        return string.format(action, IsComponentClass(param, "component") and GetComponentData(param, "name") or "")
+        
+    elseif self.typeString == "architect" then
+        local buildAnchor = GetBuildAnchor(GetContextByClass(self.npc, "container"))
+		if buildAnchor and GetCurrentBuildSlot(buildAnchor) then
+			local _, _, progress = GetCurrentBuildSlot(buildAnchor)
+			return string.format(ReadText(1001, 4218), GetComponentData(buildAnchor, "name")) .. " (" .. math.floor(progress) .. "%)"
+		else
+			return ReadText(1001, 4223)
+		end
+        
+    elseif self.typeString == "defencecontrol" then
+        local blackboard_attackenemies = GetNPCBlackboard(self.npc, "$config_attackenemies")
+		blackboard_attackenemies = blackboard_attackenemies and blackboard_attackenemies ~= 0
+		if blackboard_attackenemies then
+			return ReadText(1001, 4214)
+		else
+			return ReadText(1001, 4213)
+		end
+        
+    elseif self.typeString == "manager" then
+        return string.format(ReadText(1001, 4204), GetComponentData(GetContextByClass(self.npc, "container"), "name"))
+        
+    else
+        local command, param, action, actionParam = GetComponentData(self.npc, "aicommand", "aicommandparam", "aicommandaction", "aicommandactionparam")
+        param = IsComponentClass(param, "component") and GetComponentData(param, "name") or ""
+        actionParam = IsComponentClass(actionParam, "component") and GetComponentData(actionParam, "name") or ""
+        
+        return string.format(command, param) .. " -- " .. string.format(action, actionParam)
+    end
+end
+
+function rcNpc:getCommandCell()
+    return Helper.createFontString(self.commandString, false, "left", menu.statusMsgColor.r, menu.statusMsgColor.g, menu.statusMsgColor.b, menu.statusMsgColor.a)
+end
+function rcNpc:display(setup, npc)
     self.npc = npc
     
     local name, typeString, typeIcon, typeName, isControlEntity, combinedSkill, skillsKnown = GetComponentData(npc, "name", "typestring", "typeicon", "typename", "iscontrolentity", "combinedskill", "skillsvisible")
-    local aiCommand = Helper.parseAICommand(npc)
     
     self.name, self.typeString = name, typeString
     
     local nameCell = Helper.unlockInfo(self.category.namesKnown, name)
-    if skillsKnown then
-        nameCell = "\27Y"..combinedSkill.."\27X "..nameCell
-    end
     
-    return true, {
+    local combinedSkillRank = skillsKnown and math.floor(combinedSkill/20) or 0
+    local skillColor = skillsKnown and Helper.statusYellow or menu.grey
+    local skillStars = string.rep("*", combinedSkillRank) .. string.rep("#", 5 - combinedSkillRank)
+    local skillCell = Helper.createFontString(skillStars, false, "left", skillColor.r, skillColor.g, skillColor.b, skillColor.a, Helper.starFont, 24)
+    
+    self.row = setup:addRow(true, {
         Helper.createIcon(typeIcon, false, 255, 255, 255, 100, 0, 0, Helper.standardTextHeight, Helper.standardButtonWidth),
         -- typeName .. " " .. name,
         nameCell,
-        Helper.unlockInfo(self.category.commandsKnown, aiCommand)
-    }, nil, {1, 2, 3}
+        skillCell
+    }, self, {1, 4, 1})
+    
+    if self.category.commandsKnown then
+        self.commandString = self:getCommandString()
+        setup:addRow(true, {
+            "",
+            self:getCommandCell()
+        }, nil, {1, 5})
+    end
+end
+rcNpc.updateInterval = 3
+function rcNpc:update()
+    if self.category.commandsKnown then
+        local newCommandString = self:getCommandString()
+        if newCommandString ~= self.commandString then
+            self.commandString = newCommandString
+            SetCellContent(self.tab, self:getCommandCell(), self.row+1, 2)
+        end
+    end
 end
 function rcNpc:getDetailButtonProps()
     local text = ReadText(1001, 2961) .. " (" .. Helper.unlockInfo(self.category.namesKnown, self.name) .. ")"
@@ -217,15 +291,15 @@ end
 
 local rcLocation = menu.registerRowClass("location")
 rcLocation.updateInterval = 1
-function rcLocation:getContent()
+function rcLocation:display(setup)
     local cluster, sector, zone
     
     self.zone = GetContextByClass(menu.object, "zone", false)
     
-    return true, {
+    self.row = setup:addRow(true, {
         Helper.createIcon("menu_sector", false, 255, 255, 255, 100, 0, 0, Helper.standardTextHeight, Helper.standardButtonWidth),
         Helper.createFontString(self:getLocationText(), false, "center")
-    }, nil, {1, #menu.selectColWidths-1}
+    }, self, {1, #menu.selectColWidths-1})
 end
 function rcLocation:getLocationText()
     if not menu.unlocked.name then return ReadText(1001, 3210) end
@@ -286,18 +360,18 @@ function rcUpgrade:getOperationalText()
     
     return Helper.createFontString(Helper.estimateString(self.estimated) .. Helper.unlockInfo(self.category.defStatusKnown, self.upgrade.operational), false, "right", color.r, color.g, color.b, color.a)
 end
-function rcUpgrade:getContent(weapon, estimated)
+function rcUpgrade:display(setup, weapon, estimated)
     local operational = weapon.operational
     local total = weapon.total
     
     self.estimated = estimated
     self.upgrade = weapon
     
-    return true, {
+    self.row = setup:addRow(true, {
         Helper.createFontString(weapon.name, false, "right"),
         self:getOperationalText(),
         Helper.createFontString(Helper.estimateString(estimated) .. Helper.unlockInfo(self.category.defLevelKnown, total), false, "right")
-    }, nil, {3, 2, 1}
+    }, self, {3, 2, 1})
 end
 function rcUpgrade:updateVal(newVal)
     if newVal.operational ~= self.upgrade.operational then
@@ -311,7 +385,7 @@ rcWeapon.colors = {}
 rcWeapon.colors["inv_weaponmod_t1"] = {r = 30, g = 255, b = 0, a = 100}
 rcWeapon.colors["inv_weaponmod_t2"] = {r = 64, g = 154, b = 255, a = 100}
 rcWeapon.colors["inv_weaponmod_t3"] = {r = 181, g = 72, b = 208, a = 100}
-function rcWeapon:getContent(weapon, weaponMod)
+function rcWeapon:display(setup, weapon, weaponMod)
     self.weapon = weapon
     
     local color
@@ -321,12 +395,12 @@ function rcWeapon:getContent(weapon, weaponMod)
     else
         color = menu.white
     end
-    return true, {
+    self.row = setup:addRow(true, {
         Helper.createButton(nil, Helper.createButtonIcon("menu_info", nil, 255, 255, 255, 100), false, true),
         Helper.createFontString(weapon.name, false, "right", color.r, color.g, color.b, color.a),
         Helper.createFontString(ConvertIntegerString(weapon.dps, true, nil, true), false, "right"),
         Helper.createFontString(ConvertIntegerString(weapon.range, true, nil, true) .. " " .. ReadText(1001, 107), false, "right")
-    }, nil, {1, 2, 2, 1}
+    }, self, {1, 2, 2, 1})
 end
 function rcWeapon:applyScripts(tab, row)
     Helper.setButtonScript(menu, nil, tab, row, 1, function()
@@ -338,14 +412,14 @@ local rcAmmo = menu.registerRowClass("ammo")
 function rcAmmo:getAmountText()
     return Helper.unlockInfo(self.category.defStatusKnown, tostring(self.ammo.amount))
 end
-function rcAmmo:getContent(ammo)
+function rcAmmo:display(setup, ammo)
     self.ammo = ammo
     self.name = GetWareData(ammo.ware, "name")
     
-    return true, {
+    self.row = setup:addRow(true, {
         self.name,
         self:getAmountText()
-    }, nil, {4, 2}
+    }, self, {4, 2})
 end
 function rcAmmo:updateVal(newVal)
     if self.category.defStatusKnown then
@@ -363,7 +437,7 @@ function rcProduction:getTimeText()
     if t == 0 or not t then
         return "\27Z--"
     else
-        return ConvertTimeString(t, "%h\27Z : \27X%M\27Z : \27X%S", true)
+        return ConvertTimeString(t, "%h\27Z:\27X%M\27Z:\27X%S", true)
     end
 end
 
@@ -397,7 +471,7 @@ function rcProduction:getNameText()
     return Helper.createFontString(self.name, false, "left", color.r, color.g, color.b, 100, nil, nil, nil, nil, nil, nil, nil, mot)
 end
 
-function rcProduction:getContent(module)
+function rcProduction:display(setup, module)
     self.module = module
     self.nameKnown = IsInfoUnlockedForPlayer(module, "name")
     self.timeKnown = IsInfoUnlockedForPlayer(module, "production_time")
@@ -423,12 +497,12 @@ function rcProduction:getContent(module)
     self.lastState = data.state
     self.lastWare = data.products and data.products[1].ware
     
-    return true, {
+    self.row = setup:addRow(true, {
         iconCell,
         self:getNameText(),
         Helper.unlockInfo(self.effKnown, productText),
         Helper.unlockInfo(self.timeKnown, self:getTimeText())
-    }, nil, {1, 1, 3, 1}
+    }, self, {1, 1, 3, 1})
 end
 
 function rcProduction:update(tab, row)
@@ -472,7 +546,7 @@ local function relationColorCode(isPlayer, isEnemy)
         return "\27U"
     end
 end
-function rcShopList:getContent(item, index)
+function rcShopList:display(setup, item, index)
     self.item = item
     self.index = index
     
@@ -532,24 +606,24 @@ function rcShopList:getContent(item, index)
         text = text .. "\n" .. location
     end
     
-    return true, {
+    self.row = setup:addRow(true, {
         Helper.createFontString(text, false, "left", 170, 170, 170, 100, Helper.standardFont, Helper.standardFontSize, true, nil, nil, 0, Helper.standardSizeX/2 - 20)
         --, Helper.standardSizeX/2 - menu.selectColWidths[1] - 7)
-    }, nil, {#menu.selectColWidths}, false, baseColor
+    }, self, {#menu.selectColWidths}, false, baseColor)
 end
 
 local rcUnit = menu.registerRowClass("unit")
-function rcUnit:getContent(unit)
+function rcUnit:display(setup, unit)
     self.unit = unit
     
     self.isMarine = IsMacroClass(unit.macro, "npc")
     
-    return true, {
+    self.row = setup:addRow(true, {
         Helper.createButton(nil, Helper.createButtonIcon("menu_info", nil, 255, 255, 255, 100), false, self.category.detailsKnown),
         Helper.unlockInfo(self.category.detailsKnown, unit.name),
         self:getAmountText(),
         self:getInUseText()
-    }, nil, {1, 2, 2, 1}
+    }, self, {1, 2, 2, 1})
 end
 function rcUnit:getAmountText()
     return Helper.createFontString(Helper.unlockInfo(self.category.amountKnown, self.unit.amount), false, "right")
@@ -578,7 +652,7 @@ function rcUnit:updateUnit(newUnit)
 end
 
 local rcPersonnel = menu.registerRowClass("personnel")
-function rcPersonnel:getContent()
+function rcPersonnel:display(setup)
     if menu.type ~= "station" then return end
     
     self.inRange = IsSameComponent(GetComponentData(menu.object, "zoneid"), GetComponentData(menu.playerShip, "zoneid"))
@@ -586,10 +660,10 @@ function rcPersonnel:getContent()
     local textCell = Helper.createFontString(ReadText(1001, 1116) .. ": " .. (self.inRange and #self.category.npcs or ReadText(1001, 1117)), false, "right")
     local buttonCell = Helper.createButton(Helper.createButtonText(ReadText(1001, 2961), "center", Helper.standardFont, Helper.standardFontSize, 255, 255, 255, 100), nil, false, self.inRange)
     
-    return true, {
+    self.row = setup:addRow(true, {
         textCell,
         buttonCell
-    }, nil, {4, 2}, false, Helper.defaultHeaderBackgroundColor
+    }, self, {4, 2}, false, Helper.defaultHeaderBackgroundColor)
 end
 function rcPersonnel:applyScripts(tab, row)
     Helper.setButtonScript(menu, nil, tab, row, 5, function()
@@ -639,7 +713,7 @@ function rcJumpdrive:getStateText()
     
     return Helper.createFontString(text, false, "left", color.r, color.g, color.b, color.a)
 end
-function rcJumpdrive:getContent()
+function rcJumpdrive:display(setup)
     if menu.type ~= "ship" then return end
     
     self:assessState()
@@ -649,10 +723,10 @@ function rcJumpdrive:getContent()
         return
     end
     
-    return true, {
+    self.row = setup:addRow(true, {
         Helper.createFontString(ReadText(1001, 1104), false, "right"),
         self:getStateText()
-    }, nil, {3, 3}
+    }, self, {3, 3})
 end
 rcJumpdrive.updateInterval = 2
 function rcJumpdrive:update(tab, row)
@@ -664,10 +738,10 @@ function rcJumpdrive:update(tab, row)
 end
 
 local rcPlayerUpgrade = menu.registerRowClass("playerUpgrade")
-function rcPlayerUpgrade:getContent(upgrade, factor)
-    return true, {
+function rcPlayerUpgrade:display(setup, upgrade, factor)
+    self.row = setup:addRow( true, {
         Helper.createButton(nil, Helper.createButtonIcon(GetWareData(upgrade.ware, "icon"), nil, 255, 255, 255, 100), false),
         upgrade.name,
         Helper.createFontString(factor * upgrade.operational, false, "right")
-    }, nil, {1, 4, 1}
+    }, self, {1, 4, 1})
 end
