@@ -1,9 +1,7 @@
 <diff>
     <replace sel="//cue[@name='SectionHandler']/actions/do_elseif[contains(@value, 'gMain_object')][1]">
         <do_elseif value="event.param == 'gMain_object_closeup' or event.param == 'gMain_object'">
-            <add_player_choice_sub text="'Vanilla Object Menu'" section="MeJ_VanillaObjectMenu" choiceparam="event.param2" baseparam="event.param2" />
-            <add_player_choice_sub text="'Jimble Object Menu'" section="MeJ_OpenObjectMenu" choiceparam="event.param2" baseparam="event.param2" />
-            <add_player_choice_return text="{1002,20}" position="bottom_right" comment="(Back)" />
+            <include_actions ref="md.MEJ_ImprObjectMenu_Menu.ChoiceLib" />
         </do_elseif>
     </replace>
 </diff>

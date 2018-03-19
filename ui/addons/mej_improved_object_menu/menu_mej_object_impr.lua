@@ -134,11 +134,13 @@ end
 function catGeneral:display(setup)
     self:addItem(setup, menu.rowClasses.name)
     self:addItem(setup, menu.rowClasses.faction)
+    self:addItem(setup, menu.rowClasses.partOf)
     self:addItem(setup, menu.rowClasses.location)
     self:addItem(setup, menu.rowClasses.hullShield, "hull")
     self:addItem(setup, menu.rowClasses.hullShield, "shield")
     self:addItem(setup, menu.rowClasses.jumpdrive)
     self:addItem(setup, menu.rowClasses.fuel)
+    self:addItem(setup, menu.rowClasses.economy)
 end
 
 local catCargo = menu.registerCategory("cargo")
@@ -148,6 +150,11 @@ catCargo.extended = true
 catCargo.headerColSpans = {2, 3}
 catCargo.headerCells = {"", ""}
 catCargo.customHeader = true
+function catCargo:getHeaderString()
+    local amountString = Helper.unlockInfo(self.amountKnown, ConvertIntegerString(self.rawStorage.stored, true, 4, true))
+    local capacityString = Helper.unlockInfo(self.capacityKnown, ConvertIntegerString(self.rawStorage.capacity, true, 4, true))
+    return --[[ReadText(1001, 1400) .. sep .. ]] amountString .. "/" .. capacityString .. self.unit
+end
 function catCargo:init()
     self.rawStorage = GetStorageData(menu.object)
     self.storageSummary = self:aggregateStorage(self.rawStorage)
@@ -193,9 +200,7 @@ function catCargo:init()
         local sep = "\27Z -- \27X"
         -- local mainHeader = ReadText(1001, 1400) .. sep .. amountString .. "/" .. capacityString .. self.unit .. sep .. wareCount .. " " .. (wareCount == 1 and ReadText(1001, 45) or ReadText(1001, 46))
         
-        local amountString = Helper.unlockInfo(self.amountKnown, ConvertIntegerString(stored, true, 4, true))
-        local capacityString = Helper.unlockInfo(self.capacityKnown, ConvertIntegerString(cap, true, 4, true))
-        self.headerCells[1] = --[[ReadText(1001, 1400) .. sep .. ]] amountString .. "/" .. capacityString .. self.unit
+        self.headerCells[1] = self:getHeaderString()
         
         local hasLimits = self.products and next(self.products)
         self.headerCells[2] = Helper.createFontString(ReadText(1001, 20) .. (hasLimits and " / " .. ReadText(1001, 1127) or ""), false, "right")
@@ -233,8 +238,14 @@ function catCargo:aggregateStorage(rawStorage)
 end
 catCargo.updateInterval = 1
 function catCargo:update()
+    local prevStoredAmount = self.rawStorage.stored
     self.rawStorage = GetStorageData(menu.object)
     self.storageSummary = self:aggregateStorage(self.rawStorage)
+    
+    if prevStoredAmount ~= self.rawStorage.stored then
+        -- DebugError("Updating total stored from " .. prevStoredAmount .. " to " .. self.rawStorage.stored)
+        Helper.updateCellText(self.tab, self.headerRow, 2, self:getHeaderString())
+    end
     
     for ware, row in pairs(self.rowsByWare) do
         if self.storageSummary[ware] then
@@ -292,17 +303,14 @@ function catCrew:init()
         
         --if both types are sorted, put them in that order
         if aIndex and bIndex then
-            -- DebugError(aType .. " and " .. bType .. " are both sorted")
             return aIndex < bIndex
         end
         
-        -- DebugError(aType .. ", " .. bType .. ": only one is sorted")
         --if only one type is sorted, the npc with the unsorted type goes at the end
         if not aIndex then return false end
         if not bIndex then return true end
         
         --if neither types are sorted, sort the types in alphabetical order
-        -- DebugError("Neither " .. aType .. " nor " .. bType .. " is sorted")
         return aType < bType
     end)
     
@@ -419,6 +427,11 @@ function catArms:collectData(isUpdate)
 end
 
 function catArms:init()
+    if not IsComponentClass(menu.object, "defensible") then
+        self.visible = false
+        return
+    end
+    
     self.armament = GetAllWeapons(menu.object)
     
     --don't show empty missile ammo
@@ -725,7 +738,7 @@ catSubordinates.visible = true
 catSubordinates.enabled = true
 catSubordinates.extended = true
 function catSubordinates:init()
-    self.visible = IsInfoUnlockedForPlayer(menu.object, "managed_ships")
+    self.visible = (menu.type == "station" or menu.type == "ship") and IsInfoUnlockedForPlayer(menu.object, "managed_ships")
     if not self.visible then return end
     
     self.ships = GetSubordinates(menu.object)
@@ -816,7 +829,7 @@ function menu.processCategory(setup, cat)
         cells = {extendButton, cat.header}
     end
     
-    setup:addSimpleRow(cells, rowData, colSpans, nil, Helper.defaultHeaderBackgroundColor)
+    cat.headerRow = setup:addSimpleRow(cells, rowData, colSpans, nil, Helper.defaultHeaderBackgroundColor)
     
     if isExtended then
         cat:display(setup)
@@ -1106,6 +1119,7 @@ function menu.displayMenu(isFirstTime)
         if not rowData then return end
         if rowData.kind == "catheader" then
             local category = rowData.category
+            category.tab = tab
             Helper.setButtonScript(menu, nil, tab, row, 1, function()
                 category.extended = not category.extended
                 menu.nextRows[menu.tableNames[tab]] = row
@@ -1202,6 +1216,8 @@ function menu.onUpdate()
         menu.updateInterval = 3600
         return
     end
+    
+    if not menu.closeIfDead() then return end
     
     for k, v in pairs(menu.categories) do
         if v.updateInterval and v.update and v.visible then
@@ -1329,6 +1345,8 @@ function menu.cleanup()
     
     for k, cat in pairs(menu.categories) do
         cat.rows = nil
+        cat.tab = nil
+        cat.headerRow = nil
         if cat.cleanup then
             cat:cleanup()
         end

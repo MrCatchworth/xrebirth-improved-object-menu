@@ -21,6 +21,7 @@
                 </do_elseif>
             </actions>
         </cue>
+        <!--
         <cue name="MeJ_UIEventListenter" instantiate="true" namespace="this">
             <conditions>
                 <event_ui_triggered screen="'MeJ_ImprovedObjectMenu'" control="''" />
@@ -36,5 +37,13 @@
                 <debug_text text="'Jimble object menu opened with parameter ' + $listConcat" filter="general" />
             </actions>
         </cue>
+        -->
+        <library name="ChoiceLib">
+            <actions>
+                <add_player_choice_sub text="'Vanilla Object Menu'" section="MeJ_VanillaObjectMenu" choiceparam="event.param2" baseparam="event.param2" />
+                <add_player_choice_sub text="'Jimble Object Menu'" section="MeJ_OpenObjectMenu" choiceparam="event.param2" baseparam="event.param2" />
+                <add_player_choice_return text="{1002,20}" position="bottom_right" comment="(Back)" />
+            </actions>
+        </library>
     </cues>
 </mdscript>

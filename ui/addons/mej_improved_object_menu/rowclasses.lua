@@ -57,6 +57,35 @@ local function getStatusBar(frac, height, width, color)
     return Helper.createIcon("solid", false, color.r, color.g, color.b, color.a, 0, 0, height, frac * width)
 end
 
+local rcPartOf = menu.registerRowClass("partOf")
+function rcPartOf:display(setup)
+    if menu.type ~= "block" then return end
+    local color
+    
+    local isPlayer, isEnemy, name = GetComponentData(menu.container, "isplayerowned", "isenemy", "name")
+    if isPlayer then
+        color = menu.holomapColor.playerColor
+    elseif isEnemy then
+        color = menu.holomapColor.enemyColor
+    else
+        color = menu.holomapColor.friendColor
+    end
+    
+    self.row = setup:addRow(true, {
+        Helper.createFontString(ReadText(1001, 1134), false, "right"),
+        Helper.unlockInfo(IsInfoUnlockedForPlayer(menu.container, "name"), Helper.createFontString(name, false, "left", color.r, color.g, color.b, color.a))
+    }, self, {3, 3})
+end
+function rcPartOf:getDetailButtonProps()
+    local text = ReadText(1001, 2961)
+    local enabled = true
+    
+    return text, enabled
+end
+function rcPartOf:onDetailButtonPress()
+    Helper.closeMenuForSubSection(menu, false, "gMain_object", { 0, 0, menu.container })
+end
+
 local rcHullShield = menu.registerRowClass("hullShield")
 rcHullShield.updateInterval = 1
 function rcHullShield:getVals()
@@ -97,10 +126,12 @@ end
 
 local rcFuel = menu.registerRowClass("fuel")
 function rcFuel:display(setup)
+    if menu.type ~= "ship" then return end
+    
     local fuelAmount = GetComponentData(menu.object, "cargo").fuelcells or 0
     local fuelCapacity = GetWareCapacity(menu.object, "fuelcells")
     
-    if menu.type ~= "ship" or fuelCapacity == 0 then return end
+    if fuelCapacity == 0 then return end
     
     self.amount = fuelAmount
     self.capacity = fuelCapacity
@@ -791,7 +822,13 @@ function rcSubordinate:display(setup, ship)
 end
 rcSubordinate.updateInterval = 5
 function rcSubordinate:update()
-    if not IsComponentOperational(self.ship) then return end
+    if self.destroyed then return end
+    
+    if not IsComponentOperational(self.ship) then
+        self.destroyed = true
+        Helper.updateCellText(self.tab, self.row, 2, self:getMainString(), menu.lightGrey)
+        return
+    end
     
     self.name, self.pilot = GetComponentData(self.ship, "name", "pilot")
     local nextCommand = self:getCommandString()
@@ -799,4 +836,47 @@ function rcSubordinate:update()
         self.commandString = nextCommand
         Helper.updateCellText(self.tab, self.row, 2, self:getMainString())
     end
+end
+function rcSubordinate:getDetailButtonProps()
+    local text = self.name
+    local enabled = (not self.destroyed) and IsComponentOperational(self.ship)
+    
+    return text, enabled
+end
+function rcSubordinate:onDetailButtonPress()
+    if self.destroyed or not IsComponentOperational(self.ship) then return end
+    
+    Helper.closeMenuForSubSection(menu, false, "gMain_object", { 0, 0, self.ship })
+end
+
+local rcEconomy = menu.registerRowClass("economy")
+function rcEconomy:display(setup)
+    if not ((menu.type == "station" or (menu.type == "ship" and GetBuildAnchor(menu.object))) and (GetComponentData(menu.object, "tradesubscription") or menu.isPlayerOwned)) then
+        return
+    end
+    
+    local textCell = Helper.createFontString(ReadText(1001, 1131), false, "right")
+    local buttonCell = Helper.createButton(Helper.createButtonText(ReadText(1001, 2961), "center", Helper.standardFont, Helper.standardFontSize, 255, 255, 255, 100), nil, false, true)
+    
+    self.row = setup:addRow(true, {
+        textCell,
+        buttonCell
+    }, self, {4, 2}, false, Helper.defaultHeaderBackgroundColor)
+end
+function rcEconomy:viewStats()
+    Helper.closeMenuForSubSection(menu, false, "gMain_economystats", { 0, 0, menu.object })
+end
+function rcEconomy:applyScripts(tab, row)
+    Helper.setButtonScript(menu, nil, tab, row, 5, function()
+        self:viewStats()
+    end)
+end
+function rcEconomy:getDetailButtonProps()
+    local text = ReadText(1001, 2961)
+    local enabled = true
+    
+    return text, enabled
+end
+function rcEconomy:onDetailButtonPress()
+    self:viewStats()
 end
