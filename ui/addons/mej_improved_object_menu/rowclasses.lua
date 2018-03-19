@@ -1,6 +1,46 @@
 local menu = ...
 
 local ffi = require("ffi")
+local C = ffi.C
+ffi.cdef[[
+	typedef uint64_t UniverseID;
+	typedef struct {
+		const char* macro;
+		const char* ware;
+		uint32_t amount;
+		uint32_t capacity;
+	} AmmoData;
+	typedef struct {
+		int64_t trade;
+		int64_t defence;
+		int64_t missile;
+	} SupplyBudget;
+	typedef struct {
+		uint32_t ID;
+		const char* Name;
+		const char* RawName;
+		const char* WeaponMacro;
+		const char* Ware;
+		float DamageFactor;
+		float CoolingFactor;
+		float ReloadFactor;
+		float SpeedFactor;
+		float LifeTimeFactor;
+		float MiningFactor;
+		float StickTimeFactor;
+		float ChargeTimeFactor;
+		float BeamLengthFactor;
+		uint32_t AddedAmount;
+	} UIWeaponMod;
+	uint32_t GetAmmoStorage(AmmoData* result, uint32_t resultlen, UniverseID defensibleid, const char* ammotype);
+	bool GetInstalledWeaponMod(UniverseID weaponid, UIWeaponMod* weaponmod);
+	uint32_t GetNumAmmoStorage(UniverseID defensibleid, const char* ammotype);
+	SupplyBudget GetSupplyBudget(UniverseID containerid);
+	bool IsPlayerCameraTargetViewPossible(UniverseID targetid, bool force);
+	bool IsVRVersion(void);
+	void SetPlayerCameraCockpitView(bool force);
+	void SetPlayerCameraTargetView(UniverseID targetid, bool force);
+]]
 
 local rcName = menu.registerRowClass("name")
 function rcName:display(setup)
@@ -124,6 +164,46 @@ function rcHullShield:update(tab, row)
     end
 end
 
+local rcEngine = menu.registerRowClass("engine")
+function rcEngine:getSpeedString()
+    return ConvertIntegerString(self.speed, true, nil, true) .. " " .. ReadText(1001, 107) .. "/" .. ReadText(1001, 100)
+end
+function rcEngine:getBar()
+    return getStatusBar(self.percent/100, Helper.standardTextHeight, menu.getMultiColWidth(4, 6), Helper.statusYellow)
+end
+function rcEngine:getHullPercent(engines)
+    local hull = 0
+    for _, engine in ipairs(engines) do
+        hull = hull + GetComponentData(engine, "hullpercent")
+    end
+    return hull / #engines
+end
+function rcEngine:display(setup)
+    if not (menu.isBigShip or menu.isPlayerShip) then return end
+    
+    local engines = GetComponentData(menu.object, "engines")
+    if not next(engines) then return end
+    
+    self.speed = GetComponentData(menu.object, "maxforwardspeed")
+    self.percent = self:getHullPercent(engines)
+    
+    self.row = setup:addRow(true, {Helper.createFontString(self:getSpeedString(), false, "right"), self:getBar()}, self, {3, 3})
+end
+rcEngine.updateInterval = 30
+function rcEngine:update()
+    local newSpeed = GetComponentData(menu.object, "maxforwardspeed")
+    local newPercent = self:getHullPercent(GetComponentData(menu.object, "engines"))
+    
+    if self.speed ~= newSpeed then
+        self.speed = newSpeed
+        Helper.updateCellText(self.tab, self.row, 1, self:getSpeedString())
+    end
+    if self.percent ~= newPercent then
+        self.percent = newPercent
+        SetCellContent(self.tab, self:getBar(), self.row, 4)
+    end
+end
+
 local rcFuel = menu.registerRowClass("fuel")
 function rcFuel:display(setup)
     if menu.type ~= "ship" then return end
@@ -235,7 +315,7 @@ local rcNpc = menu.registerRowClass("npc")
 function rcNpc:getCommandString()
     local accountString
     if menu.isPlayerOwned and (self.typeString == "manager" or self.typeString == "architect") then
-        accountString = "\27W" .. ConvertMoneyString(GetAccountData(self.npc, "money"), false, true, 5, true) .. " " .. ReadText(1001, 101) .. "\27X "
+        accountString = (self.budgetWarning and "\27Y" or "\27W") .. ConvertMoneyString(GetAccountData(self.npc, "money"), false, true, 5, true) .. " \27W" .. ReadText(1001, 101) .. "\27X "
     end
     
     if self.typeString == "engineer" then
@@ -271,6 +351,31 @@ function rcNpc:getCommandString()
         return string.format(command, param) .. " -- " .. string.format(action, actionParam)
     end
 end
+function rcNpc:checkBudgetWarning()
+    if menu.buildingArchitect and IsSameComponent(self.npc, menu.buildingArchitect) then
+        local buildingTradeRestrictions = GetTradeRestrictions(menu.buildingContainer)
+        if not buildingTradeRestrictions.faction then
+            if GetComponentData(self.npc, "wantedmoney") > GetAccountData(self.npc, "money") then
+                return true
+            end
+        end
+    else
+        local wantedMoney = 0
+        if self.typeString == "architect" then
+            wantedMoney = GetComponentData(self.npc, "wantedmoney")
+        else
+            wantedMoney = GetComponentData(self.npc, "productionmoney")
+            local supplybudget = C.GetSupplyBudget(ConvertIDTo64Bit(menu.object))
+            wantedMoney = wantedMoney + tonumber(supplybudget.trade) / 100 + tonumber(supplybudget.defence) / 100 + tonumber(supplybudget.missile) / 100
+        end
+        if not GetTradeRestrictions(menu.object).faction then
+            if wantedMoney > GetAccountData(self.npc, "money") then
+                return true
+            end
+        end
+    end
+    return false
+end
 
 function rcNpc:getCommandCell()
     return Helper.createFontString(self.commandString, false, "left", menu.statusMsgColor.r, menu.statusMsgColor.g, menu.statusMsgColor.b, menu.statusMsgColor.a)
@@ -279,18 +384,23 @@ function rcNpc:display(setup, npc)
     self.npc = npc
     
     local name, typeString, typeIcon, typeName, isControlEntity, combinedSkill, skillsKnown = GetComponentData(npc, "name", "typestring", "typeicon", "typename", "iscontrolentity", "combinedskill", "skillsvisible")
-    
     self.name, self.typeString = name, typeString
     
-    local nameCell = Helper.unlockInfo(self.category.namesKnown, name)
+    self.budgetWarning = menu.isPlayerOwned and self:checkBudgetWarning() or nil
+    
+    local nameColor = self.budgetWarning and Helper.statusYellow or menu.white
+    local nameCell = Helper.unlockInfo(self.category.namesKnown, Helper.createFontString(name, false, "left", nameColor.r, nameColor.g, nameColor.b, nameColor.a))
+    
+    local icon = self.budgetWarning and "workshop_error" or typeIcon
     
     local combinedSkillRank = skillsKnown and math.floor(combinedSkill/20) or 0
     local skillColor = skillsKnown and Helper.statusYellow or menu.grey
     local skillStars = string.rep("*", combinedSkillRank) .. string.rep("#", 5 - combinedSkillRank)
     local skillCell = Helper.createFontString(skillStars, false, "left", skillColor.r, skillColor.g, skillColor.b, skillColor.a, Helper.starFont, 24)
     
+    
     self.row = setup:addRow(true, {
-        Helper.createIcon(typeIcon, false, 255, 255, 255, 100, 0, 0, Helper.standardTextHeight, Helper.standardButtonWidth),
+        Helper.createIcon(icon, false, nameColor.r, nameColor.g, nameColor.b, nameColor.a, 0, 0, Helper.standardTextHeight, Helper.standardButtonWidth),
         -- typeName .. " " .. name,
         nameCell,
         skillCell

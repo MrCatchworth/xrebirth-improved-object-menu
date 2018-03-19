@@ -139,6 +139,7 @@ function catGeneral:display(setup)
     self:addItem(setup, menu.rowClasses.hullShield, "hull")
     self:addItem(setup, menu.rowClasses.hullShield, "shield")
     self:addItem(setup, menu.rowClasses.jumpdrive)
+    self:addItem(setup, menu.rowClasses.engine)
     self:addItem(setup, menu.rowClasses.fuel)
     self:addItem(setup, menu.rowClasses.economy)
 end
@@ -742,6 +743,14 @@ function catSubordinates:init()
     if not self.visible then return end
     
     self.ships = GetSubordinates(menu.object)
+    for i = #self.ships, 1, -1 do
+        if GetBuildAnchor(self.ships[i]) then
+            table.remove(self.ships, i)
+        elseif IsComponentClass(self.ships[i], "drone") then
+            table.remove(self.ships, i)
+        end
+    end
+    
     if #self.ships == 0 then
         self.visible = false
         return
