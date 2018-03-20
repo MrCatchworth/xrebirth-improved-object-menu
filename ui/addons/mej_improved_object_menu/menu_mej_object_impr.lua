@@ -763,8 +763,54 @@ function catSubordinates:display(setup)
         self:addItem(setup, menu.rowClasses.subordinate, ship)
     end
 end
+function catSubordinates:cleanup()
+    self.ships = nil
+end
+
+local catBuildModules = menu.registerCategory("buildModules")
+catBuildModules.visible = true
+catBuildModules.enabled = true
+catBuildModules.extended = true
+catBuildModules.header = ReadText(1001, 2439)
+function catBuildModules:scanBuildStage(sequence, stage)
+    local seqModules = GetBuildStageModules(menu.object, sequence, stage)
+    for k, moduleData in ipairs(seqModules) do
+        if moduleData.library == "moduletypes_build" and moduleData.component and IsComponentOperational(moduleData.component) then
+            DebugError("Here is a build module called " .. GetComponentData(moduleData.component, "name") .. "! (" .. tostring(moduleData.component) .. ")")
+            table.insert(self.modules, moduleData.component)
+        end
+    end
+end
+function catBuildModules:init()
+    self.visible = menu.type == "station"
+    if not self.visible then return end
     
---row classes start here
+    self.modules = {}
+    
+    self:scanBuildStage("", 0)
+    
+    local buildTree = GetBuildTree(menu.object)
+    for k, sequence in ipairs(buildTree) do
+        for stage = 1, sequence.currentstage do
+            self:scanBuildStage(sequence.sequence, stage)
+        end
+    end
+    
+    if #self.modules == 0 then
+        self.visible = false
+        return
+    end
+end
+function catBuildModules:display(setup)
+    for k, module in ipairs(self.modules) do
+        self:addItem(setup, menu.rowClasses.buildModule, module)
+    end
+end
+function catBuildModules:cleanup()
+    self.modules = nil
+end
+    
+--end of categories
 --===================================================================
 
 menu.baseItemLib = {}
@@ -781,13 +827,6 @@ function menu.registerRowClass(name)
     return rc
 end
 
-local rowClassLib, rowClassLibError = loadfile("extensions/mej_improved_object_menu/ui/addons/mej_improved_object_menu/rowclasses.lua")
-if rowClassLib then
-    rowClassLib(menu)
-else
-    error("Error loading row class file: " .. rowClassLibError)
-end
-
 menu.categoryScheme = {
     left = {
         menu.categories.general,
@@ -795,6 +834,7 @@ menu.categoryScheme = {
         menu.categories.subordinates
     },
     right = {
+        menu.categories.buildModules,
         menu.categories.production,
         menu.categories.shoppingList,
         menu.categories.cargo,
@@ -865,6 +905,13 @@ local function init()
 	if Helper then
 		Helper.registerMenu(menu)
 	end
+    
+    local rowClassLib, rowClassLibError = loadfile("extensions/mej_improved_object_menu/ui/addons/mej_improved_object_menu/rowclasses.lua")
+    if rowClassLib then
+        rowClassLib(menu)
+    else
+        error("Error loading row class file: " .. rowClassLibError)
+    end
 end
 
 function menu.onShowMenu()
@@ -1122,7 +1169,7 @@ function menu.displayMenu(isFirstTime)
     menu.rowDataColumns[menu.selectTableRight] = rowDataRight
 
     --set script for encyclopedia button (top left)
-    --Helper.setButtonScript(menu, nil, menu.selectTableLeft, 1, 1, menu.buttonEncyclopedia)
+    Helper.setButtonScript(menu, nil, menu.selectTableLeft, 1, 1, menu.buttonEncyclopedia)
     
     iterateSelectRows(function(row, tab, rowData)
         if not rowData then return end
@@ -1167,17 +1214,19 @@ function menu.closeIfDead()
     return true
 end
 
+function menu.buttonEncyclopedia()
+    if not menu.closeIfDead() then return end
+    Helper.closeMenuForSubSection(menu, false, "gEncyclopedia_object", { 0, 0, menu.category, GetComponentData(menu.object, "macro"), menu.category == "stationtypes" })
+end
+
 function menu.tradeOffers()
     if not menu.closeIfDead() then return end
     Helper.closeMenuForSubSection(menu, false, "gTrade_offerselect", { 0, 0, nil, nil, nil, menu.object })
 end
 
 function menu.plotCourse()
-    if IsComponentOperational(menu.object) then
-        Helper.closeMenuForSection(menu, false, "gMainNav_select_plotcourse", {menu.object, menu.type, IsSameComponent(GetActiveGuidanceMissionComponent(), menu.object)})
-    else
-        Helper.closeMenuAndReturn(menu)
-    end
+    if not menu.closeIfDead() then return end
+    Helper.closeMenuForSection(menu, false, "gMainNav_select_plotcourse", {menu.object, menu.type, IsSameComponent(GetActiveGuidanceMissionComponent(), menu.object)})
 end
 
 function menu.refreshDetailButton(rowData)

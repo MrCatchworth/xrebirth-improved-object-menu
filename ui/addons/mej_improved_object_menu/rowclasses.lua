@@ -313,7 +313,7 @@ end
 
 local rcNpc = menu.registerRowClass("npc")
 function rcNpc:getCommandString()
-    local accountString
+    local accountString = ""
     if menu.isPlayerOwned and (self.typeString == "manager" or self.typeString == "architect") then
         accountString = (self.budgetWarning and "\27Y" or "\27W") .. ConvertMoneyString(GetAccountData(self.npc, "money"), false, true, 5, true) .. " \27W" .. ReadText(1001, 101) .. "\27X "
     end
@@ -989,4 +989,58 @@ function rcEconomy:getDetailButtonProps()
 end
 function rcEconomy:onDetailButtonPress()
     self:viewStats()
+end
+
+local rcBuildModule = menu.registerRowClass("buildModule")
+function rcBuildModule:getProgressString()
+    if self.dead or not self.nameKnown then return "\27Z--" end
+    
+    local buildAnchor = GetBuildAnchor(self.module)
+    if buildAnchor then
+        local _, _, progress = GetCurrentBuildSlot(buildAnchor)
+        
+        local macroName = GetMacroData(GetComponentData(buildAnchor, "macro"), "name")
+        return progress .. "%\27Z -- \27X" .. macroName
+    else
+        return "\27Z--"
+    end
+end
+function rcBuildModule:display(setup, module)
+    self.module = module
+    
+    self.nameKnown = IsInfoUnlockedForPlayer(self.module, "name")
+    self.name = GetComponentData(self.module, "name")
+    
+    local buttonCell = Helper.createButton(nil, Helper.createButtonIcon("menu_info", nil, 255, 255, 255, 100), false, self.nameKnown)
+    
+    local nameCell = Helper.createFontString(Helper.unlockInfo(self.nameKnown, self.name), false, "left")
+    
+    self.progress = self:getProgressString()
+    local progressCell = Helper.createFontString(self.progress, false, "left")
+    
+    self.row = setup:addRow(true, {
+        buttonCell,
+        nameCell,
+        progressCell
+    }, self, {1, 1, 4})
+end
+function rcBuildModule:applyScripts(tab, row)
+    Helper.setButtonScript(menu, nil, tab, row, 1, function()
+        Helper.closeMenuForSubSection(menu, false, "gEncyclopedia_object", { 0, 0, "moduletypes_build", GetComponentData(self.module, "macro"), false })
+    end)
+end
+rcBuildModule.updateInterval = 5
+function rcBuildModule:update()
+    if self.dead then return end
+    if not IsComponentOperational(self.module) then
+        self.dead = true
+        Helper.updateCellText(self.tab, self.row, 2, self.name, menu.grey)
+        return
+    end
+    
+    local newProgress = self:getProgressString()
+    if self.progress ~= newProgress then
+        self.progress = newProgress
+        Helper.updateCellText(self.tab, self.row, 3, self.progress)
+    end
 end
