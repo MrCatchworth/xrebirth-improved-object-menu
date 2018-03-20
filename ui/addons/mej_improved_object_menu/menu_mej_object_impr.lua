@@ -211,6 +211,7 @@ function catCargo:init()
 end
 function catCargo:display(setup)
     for ware, data in Helper.orderedPairsByWareName(self.storageSummary) do
+        AddKnownItem("wares", ware)
         self.rowsByWare[ware] = self:addItem(setup, menu.rowClasses.ware, data)
     end
 end
@@ -479,6 +480,7 @@ function catArms:display(setup)
             ffiMod = nil
         end
         self:addItem(setup, menu.rowClasses.weapon, weapon, ffiMod)
+        AddKnownItem("weapontypes_primary", weapon.macro)
     end
     if not menu.isPlayerShip then
         for ware, ammo in pairs(self.ammo) do
@@ -621,6 +623,11 @@ end
 function catUnits:display(setup)
     for k, unit in ipairs(self.units) do
         if unit.amount > 0 then
+            if IsMacroClass(unit.macro, "npc") then
+                AddKnownItem("marines", unit.macro)
+            else
+                AddKnownItem("shiptypes_xs", unit.macro)
+            end
             self:addItem(setup, menu.rowClasses.unit, unit)
         end
     end
@@ -713,6 +720,7 @@ function catPlayerUpgrades:displayCat(setup, cat)
         if not (ut == "totaltotal" or ut == "totalfree" or ut == "totaloperational" or ut == "totalconstruction" or ut == "estimated") then
             if upgrade.operational ~= 0 then
                 self:addItem(setup, menu.rowClasses.playerUpgrade, upgrade, factor)
+                AddKnownItem("wares", upgrade.ware)
                 displayed = true
             end
         end
@@ -754,6 +762,22 @@ function catSubordinates:init()
     if #self.ships == 0 then
         self.visible = false
         return
+    end
+    
+    for k, ship in pairs(self.ships) do
+        if IsComponentClass(ship, "station") then
+            AddKnownItem("stationtypes", GetComponentData(ship, "macro"))
+        elseif IsComponentClass(ship, "ship_xl") then
+            AddKnownItem("shiptypes_xl", GetComponentData(ship, "macro"))
+        elseif IsComponentClass(ship, "ship_l") then
+            AddKnownItem("shiptypes_l", GetComponentData(ship, "macro"))
+        elseif IsComponentClass(ship, "ship_m") then
+            AddKnownItem("shiptypes_m", GetComponentData(ship, "macro"))
+        elseif IsComponentClass(ship, "ship_s") then
+            AddKnownItem("shiptypes_s", GetComponentData(ship, "macro"))
+        elseif IsComponentClass(ship, "ship_xs") then
+            AddKnownItem("shiptypes_xs", GetComponentData(ship, "macro"))
+        end
     end
     
     self.header = #self.ships .. " " .. (#self.ships == 1 and ReadText(1001, 5) or ReadText(1001, 6))
