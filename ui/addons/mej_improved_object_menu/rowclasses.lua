@@ -553,6 +553,23 @@ function rcWeapon:applyScripts(tab, row)
     end)
 end
 
+local rcMissile = menu.registerRowClass("missile")
+function rcMissile:display(setup, missile)
+    self.missile = missile
+    
+    self.row = setup:addRow(true, {
+        Helper.createButton(nil, Helper.createButtonIcon("menu_info", nil, 255, 255, 255, 100), false, true),
+        Helper.createFontString(self.missile.name, false, "right"),
+        Helper.createFontString(ConvertIntegerString(missile.damage, true, nil, true), false, "right"),
+        menu.isPlayerShip and Helper.createFontString(ConvertIntegerString(missile.amount, true, nil, true), false, "right") or ""
+    }, self, {1, 2, 2, 1})
+end
+function rcMissile:applyScripts(tab, row)
+    Helper.setButtonScript(menu, nil, tab, row, 1, function()
+        Helper.closeMenuForSubSection(menu, false, "gEncyclopedia_weapon", {0, 0, "weapontypes_secondary", self.missile.macro})
+    end)
+end
+
 local rcAmmo = menu.registerRowClass("ammo")
 function rcAmmo:getAmountText()
     return Helper.unlockInfo(self.category.defStatusKnown, tostring(self.ammo.amount))

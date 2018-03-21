@@ -482,6 +482,10 @@ function catArms:display(setup)
         self:addItem(setup, menu.rowClasses.weapon, weapon, ffiMod)
         AddKnownItem("weapontypes_primary", weapon.macro)
     end
+    for k, missile in ipairs(self.armament.missiles) do
+        self:addItem(setup, menu.rowClasses.missile, missile)
+        AddKnownItem("weapontypes_secondary", missile.macro)
+    end
     if not menu.isPlayerShip then
         for ware, ammo in pairs(self.ammo) do
             self.ammoRows[ware] = self:addItem(setup, menu.rowClasses.ammo, ammo)
@@ -1018,6 +1022,33 @@ function menu.onShowMenu()
 	menu.displayMenu(true)
 end
 
+local function checkTradeOffers()
+    local tradeOffers = GetComponentData(menu.object, "tradeoffers") or {}
+    local switch
+    local hasSellOffers, hasBuyOffers
+    for _, tradeid in ipairs(tradeOffers) do
+        local tradedata = GetTradeData(tradeid)
+        if tradedata.isbuyoffer then
+            hasBuyOffers = true
+            if hasSellOffers then
+                break
+            end
+        elseif tradedata.isselloffer then
+            hasSellOffers = true
+            if hasBuyOffers then
+                break
+            end
+        end
+    end
+    if hasSellOffers and (not hasBuyOffers) then
+        switch = true
+    elseif (not hasSellOffers) and hasBuyOffers then
+        switch = false
+    end
+    
+    return switch, #tradeOffers > 0
+end
+
 function menu.displayMenu(isFirstTime)
     menu.nowDisplaying = true
     
@@ -1142,11 +1173,14 @@ function menu.displayMenu(isFirstTime)
     
     setup = Helper.createTableSetup(menu)
     
+    local tradeButtonSwitch, tradeButtonEnabled = checkTradeOffers()
+    menu.tradeButtonSellBuySwitch = tradeButtonSwitch
+    
     setup:addSimpleRow({ 
         Helper.getEmptyCellDescriptor(),
         Helper.createButton(Helper.createButtonText(ReadText(1001, 2669), "center", Helper.standardFont, 11, 255, 255, 255, 100), nil, false, true, 0, 0, 150, 25, nil, Helper.createButtonHotkey("INPUT_STATE_DETAILMONITOR_B", true)),
         Helper.getEmptyCellDescriptor(),
-        Helper.createButton(Helper.createButtonText(ReadText(1001, 1113), "center", Helper.standardFont, 11, 255, 255, 255, 100), nil, false, true, 0, 0, 150, 25, nil, Helper.createButtonHotkey("INPUT_STATE_DETAILMONITOR_BACK", true)),
+        Helper.createButton(Helper.createButtonText(ReadText(1001, 1113), "center", Helper.standardFont, 11, 255, 255, 255, 100), nil, false, tradeButtonEnabled, 0, 0, 150, 25, nil, Helper.createButtonHotkey("INPUT_STATE_DETAILMONITOR_BACK", true)),
         Helper.getEmptyCellDescriptor(),
         Helper.createButton(Helper.createButtonText(ReadText(1001, 1109), "center", Helper.standardFont, 11, 255, 255, 255, 100), nil, false, not menu.isPlayerShip, 0, 0, 150, 25, nil, Helper.createButtonHotkey("INPUT_STATE_DETAILMONITOR_Y", true)),
         Helper.getEmptyCellDescriptor(),
@@ -1245,7 +1279,7 @@ end
 
 function menu.tradeOffers()
     if not menu.closeIfDead() then return end
-    Helper.closeMenuForSubSection(menu, false, "gTrade_offerselect", { 0, 0, nil, nil, nil, menu.object })
+    Helper.closeMenuForSubSection(menu, false, "gTrade_offerselect", { 0, 0, menu.tradeButtonSellBuySwitch, nil, nil, menu.object })
 end
 
 function menu.plotCourse()
@@ -1459,6 +1493,7 @@ function menu.cleanup()
     menu.namedTables = nil
     menu.rowDataColumns = nil
     menu.objNameColor = nil
+    menu.tradeButtonSellBuySwitch = nil
 end
 
 init()
