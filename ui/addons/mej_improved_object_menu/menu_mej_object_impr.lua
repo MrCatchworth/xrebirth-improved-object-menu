@@ -138,6 +138,7 @@ function catGeneral:display(setup)
     self:addItem(setup, menu.rowClasses.location)
     self:addItem(setup, menu.rowClasses.hullShield, "hull")
     self:addItem(setup, menu.rowClasses.hullShield, "shield")
+    self:addItem(setup, menu.rowClasses.efficiency)
     self:addItem(setup, menu.rowClasses.jumpdrive)
     self:addItem(setup, menu.rowClasses.engine)
     self:addItem(setup, menu.rowClasses.fuel)
@@ -335,6 +336,113 @@ end
 function catCrew:cleanup()
     self.npcs = nil
     self.controlEntities = nil
+end
+
+local catUpkeep = menu.registerCategory("upkeep")
+catUpkeep.visible = true
+catUpkeep.enabled = true
+catUpkeep.extended = false
+function catUpkeep:init()
+    if menu.isPlayerShip or not menu.isPlayerOwned then
+        self.visible = false
+        return
+    end
+    
+    self.missions = {}
+    
+    local textWidth = menu.getMultiColWidth(2, 6)
+    
+    local numMissions = GetNumMissions()
+    for i = 1, numMissions do
+        local id, name, description, difficulty, mainType, subType, faction, reward, rewardText, _, _, _, _, missionTime, _, abortable, disableGuidance, component = GetMissionDetails(i, Helper.standardFont, Helper.standardFontSize, textWidth)
+        local objectiveText, objectiveIcon, timeout, progressName, curProgress, maxProgress = GetMissionObjective(i, Helper.standardFont, Helper.standardFontSize, textWidth)
+        
+        if mainType == "upkeep" then
+            local container = GetContextByClass(component, "container", true)
+            local buildAnchor = GetBuildAnchor(container)
+            container = buildAnchor or container
+            
+            if IsSameComponent(container, menu.object) then
+                table.insert(self.missions, {
+                    active = i == activeMission,
+                    name = name,
+                    description = description,
+                    difficulty = difficulty,
+                    subType = subType,
+                    faction = faction,
+                    reward = reward,
+                    rewardText = rewardText,
+                    objectiveText = objectiveText,
+                    objectiveIcon = objectiveIcon,
+                    timeout = (timeout and timeout ~= -1) and timeout or (missionTime or -1),
+                    progressName = progressName,
+                    curProgress = curProgress,
+                    maxProgress = maxProgress,
+                    component = component,
+                    disableGuidance = disableGuidance,
+                    id = id,
+                })
+            end
+        end
+    end
+    
+    if #self.missions == 0 then
+        self.visible = false
+        return
+    end
+    
+    self.visible = true
+    self.header = ReadText(1001, 3305) .. ": " .. #self.missions
+    
+    --[[
+    if not menu.isplayership and menu.isplayer then
+        menu.data.upkeep = {}
+        local numMissions   = GetNumMissions()
+        for i = 1, numMissions do
+            local missionID, name, description, difficulty, maintype, subtype, faction, reward, rewardtext, _, _, _, _, missiontime, _, abortable, disableguidance, associatedcomponent = GetMissionDetails(i, Helper.standardFont, Helper.standardFontSize, Helper.scaleX(425))
+            local objectiveText, objectiveIcon, timeout, progressname, curProgress, maxProgress = GetMissionObjective(i, Helper.standardFont, Helper.standardFontSize, Helper.scaleX(425))
+            
+            if maintype == "upkeep" then
+                local container = GetContextByClass(associatedcomponent, "container", true)
+                local buildanchor = GetBuildAnchor(container)
+                container = buildanchor or container
+
+                if IsSameComponent(container, menu.object) then
+                    local entry = {
+                        ["active"] = (i == activeMission),
+                        ["name"] = name,
+                        ["description"] = description,
+                        ["difficulty"] = difficulty,
+                        ["type"] = subtype,
+                        ["faction"] = faction,
+                        ["reward"] = reward,
+                        ["rewardtext"] = rewardtext,
+                        ["objectiveText"] = objectiveText,
+                        ["objectiveIcon"] = objectiveIcon,
+                        ["timeout"] = (timeout and timeout ~= -1) and timeout or (missiontime or -1),		-- timeout can be nil, if mission has no objective
+                        ["progressName"] = progressname,
+                        ["curProgress"] = curProgress,
+                        ["maxProgress"] = maxProgress or 0,	-- maxProgress can be nil, if mission has n objective
+                        ["component"] = associatedcomponent,
+                        ["disableguidance"] = disableguidance,
+                        ["ID"] = missionID,
+                        ["associatedcomponent"] = associatedcomponent
+                    }
+
+                    table.insert(menu.data.upkeep, entry)
+                end
+            end
+        end
+    end
+    ]]
+end
+function catUpkeep:display(setup)
+    for k, mission in ipairs(self.missions) do
+        self:addItem(setup, menu.rowClasses.upkeepMission, mission)
+    end
+end
+function catUpkeep:cleanup()
+    self.missions = nil
 end
 
 local catProd = menu.registerCategory("production")
@@ -862,6 +970,7 @@ menu.categoryScheme = {
         menu.categories.subordinates
     },
     right = {
+        menu.categories.upkeep,
         menu.categories.buildModules,
         menu.categories.production,
         menu.categories.shoppingList,
@@ -1384,10 +1493,10 @@ function menu.onHotkey(action)
     end
 end
 
-function menu.updateStatusMessage()
+function menu.updateStatusMessage(msg)
     local tab = menu.currentColumn
     
-    local msg = "Table = " .. menu.tableNames[tab] .. ", Row = " .. Helper.currentTableRow[tab]
+    msg = msg or "Table = " .. menu.tableNames[tab] .. ", Row = " .. Helper.currentTableRow[tab]
     
     menu.statusMessage = msg
     Helper.updateCellText(menu.selectTableLeft, 2, 1, menu.statusMessage)
@@ -1396,6 +1505,13 @@ end
 local function kludgeSetInteractive(tab)
     while GetInteractiveObject(menu.frame) ~= tab do
         SwitchInteractiveObject(menu.frame)
+    end
+end
+
+local lastMouseoverTime = GetCurRealTime()
+function menu.onTableMouseOver(tab, row)
+    if tab == menu.selectTableLeft or tab == menu.selectTableRight then
+        kludgeSetInteractive(tab)
     end
 end
 
@@ -1449,7 +1565,6 @@ end
 function menu.onSelectionChanged()
     local tab = menu.currentColumn
     local row = Helper.currentTableRow[tab]
-    --DebugError(string.format("Tab = %s, Row = %s", tab, row))
     local rowData = menu.rowDataColumns[tab][row]
     
     menu.updateStatusMessage()

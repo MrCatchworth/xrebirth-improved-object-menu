@@ -164,6 +164,20 @@ function rcHullShield:update(tab, row)
     end
 end
 
+local rcEfficiency = menu.registerRowClass("efficiency")
+function rcEfficiency:display(setup)
+    if menu.type ~= "block" then return end
+    
+    local effKnown = IsInfoUnlockedForPlayer(menu.object, "efficiency_amount")
+    local effAmount = GetComponentData(menu.object, "efficiencybonus")
+    if effAmount <= 0 then return end
+    
+    self.row = setup:addRow(true, {
+        Helper.createFontString(ReadText(1001, 1602), false, "right"),
+        Helper.createFontString(Helper.unlockInfo(effKnown, Helper.round(effAmount * 100)) .. " %", false, "left")
+    }, self, {3, 3})
+end
+
 local rcEngine = menu.registerRowClass("engine")
 function rcEngine:getSpeedString()
     return ConvertIntegerString(self.speed, true, nil, true) .. " " .. ReadText(1001, 107) .. "/" .. ReadText(1001, 100)
@@ -376,6 +390,19 @@ function rcNpc:checkBudgetWarning()
     end
     return false
 end
+function rcNpc:checkRangeWarning()
+    if GetTradeRestrictions(menu.object).faction then
+        local subordinateRange = GetNPCBlackboard(self.npc, "$config_subordinate_range")
+        if not subordinateRange then
+            if GetComponentData(menu.object, "maxradarrange") > 30000 then
+                subordinateRange = GetContextByClass(menu.object, "cluster")
+            else
+                subordinateRange = GetContextByClass(menu.object, "sector")
+            end
+        end
+        return IsContainerOperationalRangeSufficient(menu.object, subordinateRange)
+    end
+end
 
 function rcNpc:getCommandCell()
     return Helper.createFontString(self.commandString, false, "left", menu.statusMsgColor.r, menu.statusMsgColor.g, menu.statusMsgColor.b, menu.statusMsgColor.a)
@@ -383,15 +410,23 @@ end
 function rcNpc:display(setup, npc)
     self.npc = npc
     
-    local name, typeString, typeIcon, typeName, isControlEntity, combinedSkill, skillsKnown = GetComponentData(npc, "name", "typestring", "typeicon", "typename", "iscontrolentity", "combinedskill", "skillsvisible")
+    local name, typeString, typeIcon, typeName, isControlEntity, combinedSkill, skillsKnown, isPlayer = GetComponentData(npc, "name", "typestring", "typeicon", "typename", "iscontrolentity", "combinedskill", "skillsvisible", "isplayerowned")
     self.name, self.typeString = name, typeString
     
-    self.budgetWarning = menu.isPlayerOwned and self:checkBudgetWarning() or nil
+    if isPlayer and menu.isPlayerOwned and (typeString == "manager" or typeString == "architect") then
+        self.budgetWarning = self:checkBudgetWarning() or nil
+        self.rangeWarning = self:checkRangeWarning() or nil
+    end
     
-    local nameColor = self.budgetWarning and Helper.statusYellow or menu.white
-    local nameCell = Helper.unlockInfo(self.category.namesKnown, Helper.createFontString(name, false, "left", nameColor.r, nameColor.g, nameColor.b, nameColor.a))
+    local nameMot
+    if self.rangeWarning then
+        nameMot = ReadText(1001, 1129)
+    elseif self.budgetWarning then
+        nameMot = ReadText(1001, 1128)
+    end
     
-    local icon = self.budgetWarning and "workshop_error" or typeIcon
+    local nameColor = (self.budgetWarning or self.rangeWarning) and Helper.statusYellow or menu.white
+    local nameCell = Helper.unlockInfo(self.category.namesKnown, Helper.createFontString(name, false, "left", nameColor.r, nameColor.g, nameColor.b, nameColor.a, nil, nil, nil, nil, nil, nil, nil, nameMot))
     
     local combinedSkillRank = skillsKnown and math.floor(combinedSkill/20) or 0
     local skillColor = skillsKnown and Helper.statusYellow or menu.grey
@@ -400,7 +435,7 @@ function rcNpc:display(setup, npc)
     
     
     self.row = setup:addRow(true, {
-        Helper.createIcon(icon, false, nameColor.r, nameColor.g, nameColor.b, nameColor.a, 0, 0, Helper.standardTextHeight, Helper.standardButtonWidth),
+        Helper.createIcon(typeIcon, false, nameColor.r, nameColor.g, nameColor.b, nameColor.a, 0, 0, Helper.standardTextHeight, Helper.standardButtonWidth),
         -- typeName .. " " .. name,
         nameCell,
         skillCell
@@ -488,6 +523,21 @@ function rcLocation:onDetailButtonPress()
     else
         Helper.closeMenuForSubSection(menu, false, "gMainNav_menumap", { 0, 0, "zone", GetContextByClass(menu.object, "zone", true), nil, menu.object })
     end
+end
+
+local rcUpkeepMission = menu.registerRowClass("upkeepMission")
+function rcUpkeepMission:display(setup, mission)
+    self.mission = mission
+    
+    local entity = GetContextByClass(mission.component, "entity", true)
+    local entityText = entity and (GetComponentData(entity, "typename") .. ReadText(1001, 120) .. " ") or ""
+    local difficultyText = mission.difficulty == 0 and "" or " [" .. ConvertMissionLevelString(mission.difficulty) .. "]"
+    local guidanceDisabledText = mission.disableGuidance and " [" .. ReadText(1001, 3311) .. "]" or ""
+    
+    self.row = setup:addRow(true, { 
+        Helper.createIcon("missionoffer_" .. mission.subType .. "_active", false, nil, nil, nil, nil, 0, 0, menu.selectColWidths[1], menu.selectColWidths[1]), 
+        Helper.createFontString(entityText .. mission.name .. difficultyText .. guidanceDisabledText .. "\n     " .. (mission.objectiveText or ""), false, "left", 255, 255, 255, 100, Helper.standardFont, Helper.standardFontSize, true, nil, nil, 2 * Helper.standardTextHeight - 5)
+    }, self, {1, #menu.selectColWidths-1})
 end
 
 local rcUpgrade = menu.registerRowClass("upgrade")
