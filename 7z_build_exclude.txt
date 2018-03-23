@@ -1,6 +1,0 @@
-*.sh
-*.dds
-*.pdn
-*.zip
-.git*
-7z_build_exclude.txt
