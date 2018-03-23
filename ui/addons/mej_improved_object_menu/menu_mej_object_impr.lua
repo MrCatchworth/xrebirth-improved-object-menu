@@ -58,15 +58,13 @@ local menu = {
     grey = { r = 128, g = 128, b = 128, a = 100 },
     lightGrey = { r = 170, g = 170, b = 170, a = 100 },
     statusMsgColor = { r = 129, g = 160, b = 182, a = 100 },
-    
-    selectTableHeight = 535
 }
 
 function menu.getMultiColWidth(startIndex, endIndex)
     local width = 0
     local count = 0
     -- local borderWidth = 3
-    local borderWidth = Helper.largePDA and 3 or 4
+    local borderWidth = menu.lowResMode and 4 or 3
     
     for index = startIndex, endIndex do
         count = count + 1
@@ -1026,7 +1024,9 @@ local function setupColWidths()
     local colFracs = {1/3, 1/6, 1/6, 1/12, 1/4}
     local colWidths = {Helper.standardButtonWidth}
     
-    local totalWidth = GetUsableTableWidth(Helper.standardSizeX/2 - 7 - Helper.standardButtonWidth, 0, #colFracs, true)
+    local fullWidth = menu.lowResMode and (Helper.standardSizeX/2 - 11) or (Helper.standardSizeX/2)
+    
+    local totalWidth = GetUsableTableWidth(fullWidth - Helper.standardButtonWidth, 0, #colFracs, true)
     
     for k, frac in pairs(colFracs) do
         table.insert(colWidths, totalWidth * frac)
@@ -1106,7 +1106,10 @@ function menu.onShowMenu()
     local productionColor, buildColor, storageColor, radarColor, dronedockColor, efficiencyColor, defenceColor, playerColor, friendColor, enemyColor, missionColor = GetHoloMapColors()
     menu.holomapColor = { productionColor = productionColor, buildColor = buildColor, storageColor = storageColor, radarColor = radarColor, dronedockColor = dronedockColor, efficiencyColor = efficiencyColor, defenceColor = defenceColor, playerColor = playerColor, friendColor = friendColor, enemyColor = enemyColor, missionColor = missionColor }
     
-    if Helper.largePDA then
+    menu.selectTableHeight = Helper.standardSizeY - 30
+    menu.lowResMode = (not Helper.largePDA) and GetFullscreenDetailmonitorOption()
+    
+    if not menu.lowResMode then
         Helper.standardFontSize = 11
         Helper.standardTextHeight = 18
     end
@@ -1272,7 +1275,7 @@ function menu.displayMenu(isFirstTime)
         menu.processCategory(setup, cat)
     end
     
-    local selectRightDesc = setup:createCustomWidthTable(clone(menu.selectColWidths), false, false, true, tabRight, 0, (Helper.standardSizeX/2) - 7, 0, menu.selectTableHeight, true, topRowRight, curRowRight)
+    local selectRightDesc = setup:createCustomWidthTable(clone(menu.selectColWidths), false, false, true, tabRight, 0, (Helper.standardSizeX/2), 0, menu.selectTableHeight, true, topRowRight, curRowRight)
     
     local rowDataRight = clone(menu.rowDataMap)
     menu.rowDataMap = {}
@@ -1609,6 +1612,8 @@ function menu.cleanup()
     menu.rowDataColumns = nil
     menu.objNameColor = nil
     menu.tradeButtonSellBuySwitch = nil
+    menu.selectTableHeight = nil
+    menu.lowResMode = nil
 end
 
 init()

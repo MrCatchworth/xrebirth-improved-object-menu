@@ -428,10 +428,17 @@ function rcNpc:display(setup, npc)
     local nameColor = (self.budgetWarning or self.rangeWarning) and Helper.statusYellow or menu.white
     local nameCell = Helper.unlockInfo(self.category.namesKnown, Helper.createFontString(name, false, "left", nameColor.r, nameColor.g, nameColor.b, nameColor.a, nil, nil, nil, nil, nil, nil, nil, nameMot))
     
+    local skillCell
     local combinedSkillRank = skillsKnown and math.floor(combinedSkill/20) or 0
     local skillColor = skillsKnown and Helper.statusYellow or menu.grey
-    local skillStars = string.rep("*", combinedSkillRank) .. string.rep("#", 5 - combinedSkillRank)
-    local skillCell = Helper.createFontString(skillStars, false, "left", skillColor.r, skillColor.g, skillColor.b, skillColor.a, Helper.starFont, 24)
+    
+    if not menu.lowResMode then
+        local skillStars = string.rep("*", combinedSkillRank) .. string.rep("#", 5 - combinedSkillRank)
+        skillCell = Helper.createFontString(skillStars, false, "left", skillColor.r, skillColor.g, skillColor.b, skillColor.a, Helper.starFont)
+    else
+        local skillVal = Helper.unlockInfo(skillsKnown, tostring(combinedSkillRank)) .. " / 5"
+        skillCell = Helper.createFontString(skillVal, false, "center", skillColor.r, skillColor.g, skillColor.b, skillColor.a, Helper.standardFontBold)
+    end
     
     
     self.row = setup:addRow(true, {
