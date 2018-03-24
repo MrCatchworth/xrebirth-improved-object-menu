@@ -1,2 +1,3 @@
 - Player drones
 - Commander (of the current object)
+- Group subordinate ships by control entity

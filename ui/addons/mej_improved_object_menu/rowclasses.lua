@@ -44,8 +44,12 @@ ffi.cdef[[
 
 local rcName = menu.registerRowClass("name")
 function rcName:display(setup)
+    local tradeSubCell = ""
+    if menu.type ~= "ship" and GetComponentData(menu.object, "tradesubscription") then
+        tradeSubCell = Helper.createIcon("menu_eye", false, 255, 255, 255, 100, 0, 0, Helper.standardTextHeight, Helper.standardButtonWidth)
+    end
     self.row = setup:addRow(true, {
-        "",
+        tradeSubCell,
         Helper.createFontString(Helper.unlockInfo(menu.unlocked.name, GetComponentData(menu.object, "name")), false, "center", menu.objNameColor.r, menu.objNameColor.g, menu.objNameColor.b, menu.objNameColor.a)
     }, self, {1, #menu.selectColWidths-1})
 end
@@ -84,11 +88,45 @@ function rcFaction:display(setup)
 end
 function rcFaction:getDetailButtonProps()
     local text = ReadText(1001, 2400)
-    local enabled = true
+    local enabled = self.faction ~= "player" and IsKnownItem("factions", self.faction)
     return text, enabled
 end
 function rcFaction:onDetailButtonPress()
     Helper.closeMenuForSubSection(menu, false, "gEncyclopedia_faction", {0, 0, self.faction})
+end
+
+local rcCommander = menu.registerRowClass("commander")
+function rcCommander:display(setup)
+    if menu.type ~= "ship" then return end
+    
+    local commander = GetCommander(menu.object)
+    if not commander then return end
+    
+    local color
+    local isPlayer, isEnemy, name = GetComponentData(commander, "isplayerowned", "isenemy", "name")
+    if isPlayer then
+        color = menu.holomapColor.playerColor
+    elseif isEnemy then
+        color = menu.holomapColor.enemyColor
+    else
+        color = menu.holomapColor.friendColor
+    end
+    
+    self.commander = commander
+    
+    self.row = setup:addRow(true, {
+        Helper.createFontString(ReadText(1001, 1112), false, "right"),
+        Helper.unlockInfo(IsInfoUnlockedForPlayer(commander, "name"), Helper.createFontString(name, false, "left", color.r, color.g, color.b, color.a))
+    }, self, {3, 3})
+end
+function rcCommander:getDetailButtonProps()
+    local text = ReadText(1001, 2961)
+    local enabled = IsComponentOperational(self.commander) and IsInfoUnlockedForPlayer(self.commander, "name")
+    return text, enabled
+end
+function rcCommander:onDetailButtonPress()
+    if not IsComponentOperational(self.commander) then return end
+    Helper.closeMenuForSubSection(menu, false, "gMain_object", { 0, 0, self.commander })
 end
 
 local function getStatusBar(frac, height, width, color)
@@ -203,7 +241,7 @@ function rcEngine:display(setup)
     
     self.row = setup:addRow(true, {Helper.createFontString(self:getSpeedString(), false, "right"), self:getBar()}, self, {3, 3})
 end
-rcEngine.updateInterval = 30
+rcEngine.updateInterval = 5
 function rcEngine:update()
     local newSpeed = GetComponentData(menu.object, "maxforwardspeed")
     local newPercent = self:getHullPercent(GetComponentData(menu.object, "engines"))
@@ -239,6 +277,37 @@ function rcFuel:display(setup)
     self.row = setup:addRow(true, {
         Helper.createFontString(ReadText(20205, 800), false, "right"),
         fuelText
+    }, self, {3, 3})
+end
+
+local rcBoardRes = menu.registerRowClass("boardingResistance")
+function rcBoardRes:display(setup)
+    if not menu.isBigShip then return end
+    local res = GetComponentData(menu.object, "boardingresistance")
+    self.res = res
+    
+    self.row = setup:addRow(true, {
+        Helper.createFontString(ReadText(1001, 1324), false, "right"),
+        tostring(res)
+    }, self, {3, 3})
+end
+rcBoardRes.updateInterval = 5
+function rcBoardRes:update()
+    local newRes = GetComponentData(menu.object, "boardingresistance")
+    if newRes ~= self.res then
+        self.res = newRes
+        Helper.updateCellText(self.tab, self.row, 4, tostring(newRes))
+    end
+end
+
+local rcBoardStr = menu.registerRowClass("boardingStrength")
+function rcBoardStr:display(setup)
+    if not (menu.isPlayerShip and GetComponentData(menu.object, "boardingnpc")) then return end
+    local res = GetComponentData(menu.object, "boardingstrength")
+    
+    self.row = setup:addRow(true, {
+        Helper.createFontString(ReadText(1001, 1325), false, "right"),
+        tostring(res)
     }, self, {3, 3})
 end
 
@@ -825,8 +894,13 @@ function rcShopList:display(setup, item, index)
         text = text .. "\n" .. location
     end
     
+    -- local textWidth = (Helper.standardSizeX/2) - 20
+    local textWidth = menu.getMultiColWidth(1, 6)
+    
+    DebugError("Shopping list width: " .. textWidth)
+    
     self.row = setup:addRow(true, {
-        Helper.createFontString(text, false, "left", 170, 170, 170, 100, Helper.standardFont, Helper.standardFontSize, true, nil, nil, 0, Helper.standardSizeX/2 - 20)
+        Helper.createFontString(text, false, "left", 170, 170, 170, 100, Helper.standardFont, Helper.standardFontSize, true, nil, nil, 0, textWidth)
         --, Helper.standardSizeX/2 - menu.selectColWidths[1] - 7)
     }, self, {#menu.selectColWidths}, false, baseColor)
 end
@@ -868,6 +942,27 @@ function rcUnit:updateUnit(newUnit)
         self.unit.unavailable = newUnit.unavailable
         SetCellContent(self.tab, self:getInUseText(), self.row, 6)
     end
+end
+
+local rcPlayerDrone = menu.registerRowClass("playerDrone")
+function rcPlayerDrone:display(setup, drone)
+    self.drone = drone
+    
+    local droneIcon = GetMacroData(drone.macro, "icon")
+    
+    local iconCell = Helper.createButton(nil, Helper.createButtonIcon(droneIcon ~= "" and droneIcon or "menu_info", nil, 255, 255, 255, 100))
+    
+    self.row = setup:addRow(true, {
+        iconCell,
+        drone.name,
+        Helper.createFontString(drone.amount, false, "right"), 
+        Helper.createFontString("-", false, "right", menu.grey.r, menu.grey.g, menu.grey.b, menu.grey.a) 
+    }, self, {1, 2, 2, 1})
+end
+function rcPlayerDrone:applyScripts(tab, row)
+    Helper.setButtonScript(menu, nil, tab, row, 1, function()
+        Helper.closeMenuForSubSection(menu, false, "gEncyclopedia_object", {0, 0, "shiptypes_xs", self.drone.macro, false})
+    end)
 end
 
 local rcPersonnel = menu.registerRowClass("personnel")

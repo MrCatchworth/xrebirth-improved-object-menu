@@ -132,14 +132,17 @@ end
 function catGeneral:display(setup)
     self:addItem(setup, menu.rowClasses.name)
     self:addItem(setup, menu.rowClasses.faction)
+    self:addItem(setup, menu.rowClasses.commander)
     self:addItem(setup, menu.rowClasses.partOf)
     self:addItem(setup, menu.rowClasses.location)
     self:addItem(setup, menu.rowClasses.hullShield, "hull")
     self:addItem(setup, menu.rowClasses.hullShield, "shield")
+    self:addItem(setup, menu.rowClasses.engine)
     self:addItem(setup, menu.rowClasses.efficiency)
     self:addItem(setup, menu.rowClasses.jumpdrive)
-    self:addItem(setup, menu.rowClasses.engine)
     self:addItem(setup, menu.rowClasses.fuel)
+    self:addItem(setup, menu.rowClasses.boardingResistance)
+    self:addItem(setup, menu.rowClasses.boardingStrength)
     self:addItem(setup, menu.rowClasses.economy)
 end
 
@@ -686,25 +689,57 @@ function catUnits:init()
     self.detailsKnown = IsInfoUnlockedForPlayer(menu.object, "units_details")
     
     self.units = GetUnitStorageData(menu.object)
-    if #self.units <= 0 then
+    local unitTotal = self.units.stored
+    local unitCapacity = self.units.capacity
+    
+    local playerDroneTotal = 0
+    if menu.isPlayerShip then
+        local rawDrones = GetPlayerDroneStorageData()
+        unitCapacity = unitCapacity + GetPlayerDroneSlots()
+        
+        self.playerDrones = {}
+        for k, rawDrone in pairs(rawDrones) do
+            if type(k) ~= "string" then
+            
+                local found = false
+                for l, drone in ipairs(self.playerDrones) do
+                    if drone.macro == rawDrone.macro then
+                        found = true
+                        drone.amount = drone.amount + rawDrone.amount + 1
+                        break
+                    end
+                end
+                if not found then
+                    rawDrone.amount = rawDrone.amount + 1
+                    table.insert(self.playerDrones, rawDrone)
+                end
+                
+            end
+        end
+        
+        for k, drone in ipairs(self.playerDrones) do
+            playerDroneTotal = playerDroneTotal + drone.amount
+        end
+        
+    end
+    unitTotal = unitTotal + playerDroneTotal
+    
+    if unitTotal <= 0 then
         self.visible = false
         return
     end
-    self:aggregateByMacro()
+    self:aggregate()
     
-    local hasUnits = false
-    for k, unit in ipairs(self.units) do
-        if unit.amount > 0 then
-            hasUnits = true
-            break
+    local hasUnits = playerDroneTotal > 0
+    
+    if not hasUnits then
+        for k, unit in ipairs(self.units) do
+            if unit.amount > 0 then
+                hasUnits = true
+                break
+            end
         end
     end
-    
-    --[[
-    if menu.isPlayerShip then
-        hasUnits = true
-    end
-    ]]
     
     if not hasUnits then
         self.visible = false
@@ -713,7 +748,7 @@ function catUnits:init()
     
     self.visible = true
     
-    local mainHeader = ReadText(1001, 22) .. "\27Z -- \27X" .. Helper.unlockInfo(self.amountKnown, self.units.stored) .. "\27Z / \27X" .. Helper.unlockInfo(self.capacityKnown, self.units.capacity)
+    local mainHeader = ReadText(1001, 22) .. "\27Z -- \27X" .. Helper.unlockInfo(self.amountKnown, unitTotal) .. "\27Z / \27X" .. Helper.unlockInfo(self.capacityKnown, unitCapacity)
     if self.extended then
         self.customHeader = true
         self.headerCells[1] = mainHeader
@@ -724,13 +759,14 @@ function catUnits:init()
         self.header = mainHeader
     end
 end
-function catUnits:aggregateByMacro()
+function catUnits:aggregate()
     self.unitsByMacro = {}
     for k, unit in ipairs(self.units) do
         self.unitsByMacro[unit.macro] = unit
     end
 end
 function catUnits:display(setup)
+    self.unitRows = {}
     for k, unit in ipairs(self.units) do
         if unit.amount > 0 then
             if IsMacroClass(unit.macro, "npc") then
@@ -738,17 +774,27 @@ function catUnits:display(setup)
             else
                 AddKnownItem("shiptypes_xs", unit.macro)
             end
-            self:addItem(setup, menu.rowClasses.unit, unit)
+            table.insert(self.unitRows, self:addItem(setup, menu.rowClasses.unit, unit))
+        end
+    end
+    if menu.isPlayerShip then
+        local separatorAdded = false
+        for k, drone in ipairs(self.playerDrones) do
+            if not separatorAdded then
+                setup:addRow(false, {Helper.createFontString("", false, nil, nil, nil, nil, nil, nil, 6, nil, nil, nil, 6)}, nil, {#menu.selectColWidths}, false, Helper.defaultHeaderBackgroundColor)
+                separatorAdded = true
+            end
+            self:addItem(setup, menu.rowClasses.playerDrone, drone)
         end
     end
 end
 catUnits.updateInterval = 3
 function catUnits:update()
-    if #self.rows == 0 then return end
+    if #self.unitRows == 0 then return end
     
     self.units = GetUnitStorageData(menu.object)
-    self:aggregateByMacro()
-    for k, row in ipairs(self.rows) do
+    self:aggregate()
+    for k, row in ipairs(self.unitRows) do
         local newUnit = self.unitsByMacro[row.unit.macro]
         if newUnit then
             row:updateUnit(newUnit)
