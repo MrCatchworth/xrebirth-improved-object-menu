@@ -293,15 +293,16 @@ function catCrew:init()
     
     self.npcs = GetNPCs(menu.object)
     
-    self.controlEntities = {}
+    self.displayedNpcs = {}
     for k, npc in pairs(self.npcs) do
-        if GetComponentData(npc, "iscontrolentity") then
-            table.insert(self.controlEntities, npc)
+        local isControlEntity, isPlayer = GetComponentData(npc, "iscontrolentity", "isplayerowned")
+        if isControlEntity or (menu.isPlayerOwned and isPlayer) then
+            table.insert(self.displayedNpcs, npc)
         end
     end
-    table.insert(self.controlEntities, menu.buildingArchitect)
+    table.insert(self.displayedNpcs, menu.buildingArchitect)
     
-    table.sort(self.controlEntities, function(a, b)
+    table.sort(self.displayedNpcs, function(a, b)
         local aType, bType = GetComponentData(a, "typestring"), GetComponentData(b, "typestring")
         local aIndex, bIndex = self.typeOrdering[aType], self.typeOrdering[bType]
         
@@ -319,7 +320,7 @@ function catCrew:init()
     end)
     
     --[[
-    for k, npc in ipairs(self.controlEntities) do
+    for k, npc in ipairs(self.displayedNpcs) do
         DebugError(GetComponentData(npc, "typestring"))
     end
     ]]
@@ -330,13 +331,13 @@ function catCrew:init()
 end
 function catCrew:display(setup)
     self:addItem(setup, menu.rowClasses.personnel)
-    for k, npc in pairs(self.controlEntities) do
+    for k, npc in pairs(self.displayedNpcs) do
         self:addItem(setup, menu.rowClasses.npc, npc)
     end
 end
 function catCrew:cleanup()
     self.npcs = nil
-    self.controlEntities = nil
+    self.displayedNpcs = nil
 end
 
 local catUpkeep = menu.registerCategory("upkeep")
@@ -667,6 +668,14 @@ function catShoppingList:display(setup)
     for k, item in pairs(self.shoppingList) do
         self:addItem(setup, menu.rowClasses.shoppingList, item, k)
     end
+end
+function catShoppingList:getDetailButtonProps()
+    local text = ReadText(1001, 73)
+    local enabled = self.enabled
+    return text, enabled
+end
+function catShoppingList:onDetailButtonPress()
+    ClearTradeQueue(menu.object)
 end
 function catShoppingList:cleanup()
     self.shoppingList = nil

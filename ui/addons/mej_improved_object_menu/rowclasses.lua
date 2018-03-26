@@ -378,9 +378,8 @@ function rcWare:applyScripts(tab, row)
     end)
 end
 function rcWare:updateAmount(newAmount)
-    -- DebugError("Update amount of " .. self.ware.name)
     if self.ware.amount ~= newAmount then
-        DebugError(self.ware.name .. " has changed from " .. self.ware.amount .. " to " .. newAmount)
+        -- DebugError(self.ware.name .. " has changed from " .. self.ware.amount .. " to " .. newAmount)
         
         local nameNeedsUpdate = self.ware.amount == 0 or newAmount == 0
         
@@ -473,9 +472,6 @@ function rcNpc:checkRangeWarning()
     end
 end
 
-function rcNpc:getCommandCell()
-    return Helper.createFontString(self.commandString, false, "left", menu.statusMsgColor.r, menu.statusMsgColor.g, menu.statusMsgColor.b, menu.statusMsgColor.a)
-end
 function rcNpc:display(setup, npc)
     self.npc = npc
     
@@ -517,31 +513,36 @@ function rcNpc:display(setup, npc)
         skillCell
     }, self, {1, 4, 1})
     
-    if self.category.commandsKnown then
+    self.showCommand = self.category.commandsKnown and isControlEntity
+    
+    if self.showCommand then
         self.commandString = self:getCommandString()
         setup:addRow(true, {
             "",
-            self:getCommandCell()
+            Helper.createFontString(self.commandString, false, "left", menu.statusMsgColor.r, menu.statusMsgColor.g, menu.statusMsgColor.b, menu.statusMsgColor.a)
         }, nil, {1, 5})
     end
 end
 rcNpc.updateInterval = 3
 function rcNpc:update()
-    if self.category.commandsKnown then
+    if not IsComponentOperational(self.npc) then return end
+    
+    if self.showCommand then
         local newCommandString = self:getCommandString()
         if newCommandString ~= self.commandString then
             self.commandString = newCommandString
-            SetCellContent(self.tab, self:getCommandCell(), self.row+1, 2)
+            Helper.updateCellText(self.tab, self.row+1, 2, self.commandString)
         end
     end
 end
 function rcNpc:getDetailButtonProps()
-    local text = ReadText(1001, 2961) .. " (" .. Helper.unlockInfo(self.category.namesKnown, self.name) .. ")"
-    local enabled = self.category.namesKnown
+    local text = ReadText(1001, 2961)
+    local enabled = self.category.namesKnown and IsComponentOperational(self.npc)
     
     return text, enabled
 end
 function rcNpc:onDetailButtonPress()
+    if not IsComponentOperational(self.npc) then return end
     Helper.closeMenuForSubSection(menu, false, "gMain_charOrders", { 0, 0, self.npc })
 end
 
@@ -617,7 +618,7 @@ function rcUpkeepMission:display(setup, mission)
 end
 
 local rcUpgrade = menu.registerRowClass("upgrade")
-function rcUpgrade:getOperationalText()
+function rcUpgrade:getOperationalInfo()
     local color
     if self.upgrade.operational/self.upgrade.total <= 0.5 then
         color = Helper.statusRed
@@ -629,7 +630,7 @@ function rcUpgrade:getOperationalText()
         color = menu.white
     end
     
-    return Helper.createFontString(Helper.estimateString(self.estimated) .. Helper.unlockInfo(self.category.defStatusKnown, self.upgrade.operational), false, "right", color.r, color.g, color.b, color.a)
+    return Helper.estimateString(self.estimated) .. Helper.unlockInfo(self.category.defStatusKnown, self.upgrade.operational), color
 end
 function rcUpgrade:display(setup, weapon, estimated)
     local operational = weapon.operational
@@ -638,16 +639,18 @@ function rcUpgrade:display(setup, weapon, estimated)
     self.estimated = estimated
     self.upgrade = weapon
     
+    local text, color = self:getOperationalInfo()
+    
     self.row = setup:addRow(true, {
         Helper.createFontString(weapon.name, false, "right"),
-        self:getOperationalText(),
+        Helper.createFontString(text, false, "right", color.r, color.g, color.b, color.a),
         Helper.createFontString(Helper.estimateString(estimated) .. Helper.unlockInfo(self.category.defLevelKnown, total), false, "right")
     }, self, {3, 2, 1})
 end
 function rcUpgrade:updateVal(newVal)
     if newVal.operational ~= self.upgrade.operational then
         self.upgrade.operational = newVal.operational
-        SetCellContent(self.tab, self:getOperationalText(), self.row, 4)
+        Helper.updateCellText(self.tab, self.row, 4, self:getOperationalInfo())
     end
 end
 
@@ -719,13 +722,12 @@ function rcAmmo:updateVal(newVal)
 end
 
 local rcProduction = menu.registerRowClass("production")
-rcProduction.updateInterval = 3
 function rcProduction:getTimeText()
     local t = self.data.remainingtime
-    if t == 0 or not t then
+    if (not t) or t == 0 then
         return "\27Z--"
     else
-        return ConvertTimeString(t, "%h\27Z:\27X%M\27Z:\27X%S", true)
+        return ConvertTimeString(t, "%h:%M:%S", true)
     end
 end
 
@@ -792,7 +794,7 @@ function rcProduction:display(setup, module)
         Helper.unlockInfo(self.timeKnown, self:getTimeText())
     }, self, {1, 1, 3, 1})
 end
-
+rcProduction.updateInterval = 3
 function rcProduction:update(tab, row)
     if not self.timeKnown or not IsComponentOperational(self.module) then return end
     
@@ -897,7 +899,7 @@ function rcShopList:display(setup, item, index)
     -- local textWidth = (Helper.standardSizeX/2) - 20
     local textWidth = menu.getMultiColWidth(1, 6)
     
-    DebugError("Shopping list width: " .. textWidth)
+    -- DebugError("Shopping list width: " .. textWidth)
     
     self.row = setup:addRow(true, {
         Helper.createFontString(text, false, "left", 170, 170, 170, 100, Helper.standardFont, Helper.standardFontSize, true, nil, nil, 0, textWidth)
@@ -914,15 +916,9 @@ function rcUnit:display(setup, unit)
     self.row = setup:addRow(true, {
         Helper.createButton(nil, Helper.createButtonIcon("menu_info", nil, 255, 255, 255, 100), false, self.category.detailsKnown),
         Helper.unlockInfo(self.category.detailsKnown, unit.name),
-        self:getAmountText(),
-        self:getInUseText()
+        Helper.createFontString(Helper.unlockInfo(self.category.amountKnown, self.unit.amount), false, "right"),
+        Helper.createFontString(Helper.unlockInfo(self.category.detailsKnown, self.unit.unavailable), false, "right")
     }, self, {1, 2, 2, 1})
-end
-function rcUnit:getAmountText()
-    return Helper.createFontString(Helper.unlockInfo(self.category.amountKnown, self.unit.amount), false, "right")
-end
-function rcUnit:getInUseText()
-    return Helper.createFontString(Helper.unlockInfo(self.category.detailsKnown, self.unit.unavailable), false, "right")
 end
 function rcUnit:applyScripts(tab, row)
     Helper.setButtonScript(menu, nil, tab, row, 1, function()
@@ -936,11 +932,11 @@ end
 function rcUnit:updateUnit(newUnit)
     if self.category.amountKnown and newUnit.amount ~= self.unit.amount then
         self.unit.amount = newUnit.amount
-        SetCellContent(self.tab, self:getAmountText(), self.row, 4)
+        Helper.updateCellText(self.tab, self.row, 4, self.unit.amount)
     end
     if self.category.detailsKnown and newUnit.unavailable ~= self.unit.unavailable then
         self.unit.unavailable = newUnit.unavailable
-        SetCellContent(self.tab, self:getInUseText(), self.row, 6)
+        Helper.updateCellText(self.tab, self.row, 6, self.unit.unavailable)
     end
 end
 
@@ -1008,7 +1004,7 @@ function rcJumpdrive:assessState()
         self.state = "ready"
     end
 end
-function rcJumpdrive:getStateText()
+function rcJumpdrive:getStateInfo()
     local text
     local color
     if self.state == "none" then
@@ -1025,7 +1021,7 @@ function rcJumpdrive:getStateText()
         color = menu.white
     end
     
-    return Helper.createFontString(text, false, "left", color.r, color.g, color.b, color.a)
+    return text, color
 end
 function rcJumpdrive:display(setup)
     if menu.type ~= "ship" then return end
@@ -1037,16 +1033,18 @@ function rcJumpdrive:display(setup)
         return
     end
     
+    local jdText, jdColor = self:getStateInfo()
+    
     self.row = setup:addRow(true, {
         Helper.createFontString(ReadText(1001, 1104), false, "right"),
-        self:getStateText()
+        Helper.createFontString(jdText, false, "left", jdColor.r, jdColor.g, jdColor.b, jdColor.a)
     }, self, {3, 3})
 end
 rcJumpdrive.updateInterval = 2
 function rcJumpdrive:update(tab, row)
     self:assessState()
     if self.state ~= self.lastState then
-        SetCellContent(tab, self:getStateText(), row, 4)
+        Helper.updateCellText(self.tab, self.row, 4, self:getStateInfo())
         self.lastState = self.state
     end
 end
