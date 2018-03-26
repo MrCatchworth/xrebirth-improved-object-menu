@@ -38,6 +38,7 @@ ffi.cdef[[
 	bool IsVRVersion(void);
 	void SetPlayerCameraCockpitView(bool force);
 	void SetPlayerCameraTargetView(UniverseID targetid, bool force);
+    double GetCurrentGameTime(void);
 ]]
 
 --shallow clone
@@ -395,48 +396,6 @@ function catUpkeep:init()
     
     self.visible = true
     self.header = ReadText(1001, 3305) .. ": " .. #self.missions
-    
-    --[[
-    if not menu.isplayership and menu.isplayer then
-        menu.data.upkeep = {}
-        local numMissions   = GetNumMissions()
-        for i = 1, numMissions do
-            local missionID, name, description, difficulty, maintype, subtype, faction, reward, rewardtext, _, _, _, _, missiontime, _, abortable, disableguidance, associatedcomponent = GetMissionDetails(i, Helper.standardFont, Helper.standardFontSize, Helper.scaleX(425))
-            local objectiveText, objectiveIcon, timeout, progressname, curProgress, maxProgress = GetMissionObjective(i, Helper.standardFont, Helper.standardFontSize, Helper.scaleX(425))
-            
-            if maintype == "upkeep" then
-                local container = GetContextByClass(associatedcomponent, "container", true)
-                local buildanchor = GetBuildAnchor(container)
-                container = buildanchor or container
-
-                if IsSameComponent(container, menu.object) then
-                    local entry = {
-                        ["active"] = (i == activeMission),
-                        ["name"] = name,
-                        ["description"] = description,
-                        ["difficulty"] = difficulty,
-                        ["type"] = subtype,
-                        ["faction"] = faction,
-                        ["reward"] = reward,
-                        ["rewardtext"] = rewardtext,
-                        ["objectiveText"] = objectiveText,
-                        ["objectiveIcon"] = objectiveIcon,
-                        ["timeout"] = (timeout and timeout ~= -1) and timeout or (missiontime or -1),		-- timeout can be nil, if mission has no objective
-                        ["progressName"] = progressname,
-                        ["curProgress"] = curProgress,
-                        ["maxProgress"] = maxProgress or 0,	-- maxProgress can be nil, if mission has n objective
-                        ["component"] = associatedcomponent,
-                        ["disableguidance"] = disableguidance,
-                        ["ID"] = missionID,
-                        ["associatedcomponent"] = associatedcomponent
-                    }
-
-                    table.insert(menu.data.upkeep, entry)
-                end
-            end
-        end
-    end
-    ]]
 end
 function catUpkeep:display(setup)
     for k, mission in ipairs(self.missions) do
@@ -676,6 +635,7 @@ function catShoppingList:getDetailButtonProps()
 end
 function catShoppingList:onDetailButtonPress()
     ClearTradeQueue(menu.object)
+    menu.setDelayedRefresh(0.2)
 end
 function catShoppingList:cleanup()
     self.shoppingList = nil
@@ -1097,13 +1057,6 @@ local function init()
 	if Helper then
 		Helper.registerMenu(menu)
 	end
-    
-    local rowClassLib, rowClassLibError = loadfile("extensions/mej_improved_object_menu/ui/addons/mej_improved_object_menu/rowclasses.lua")
-    if rowClassLib then
-        rowClassLib(menu)
-    else
-        error("Error loading row class file: " .. rowClassLibError)
-    end
 end
 
 function menu.onShowMenu()
@@ -1502,12 +1455,20 @@ function menu.onUpdate()
     
     if not menu.closeIfDead() then return end
     
+    local timeNow = C.GetCurrentGameTime()
+    
+    if menu.nextRefreshTime and menu.nextRefreshTime < timeNow then
+        DebugError("Delayed refresh has now triggered!")
+        menu.nextRefreshTime = nil
+        menu.displayMenu()
+        return
+    end
+    
     for k, v in pairs(menu.categories) do
         if v.updateInterval and v.update and v.visible then
             local nextUpd = v.nextUpdate or 0
-            local now = GetCurTime()
-            if now > nextUpd then
-                v.nextUpdate = now + v.updateInterval
+            if timeNow > nextUpd then
+                v.nextUpdate = timeNow + v.updateInterval
                 v:update()
             end
         end
@@ -1518,9 +1479,8 @@ function menu.onUpdate()
         
         if rowData.updateInterval and rowData.update then
             local nextUpd = rowData.nextUpdate or 0
-            local now = GetCurTime()
-            if now > nextUpd then
-                rowData.nextUpdate = now + rowData.updateInterval
+            if timeNow > nextUpd then
+                rowData.nextUpdate = timeNow + rowData.updateInterval
                 rowData:update(tab, row)
             end
         end
@@ -1566,7 +1526,6 @@ local function kludgeSetInteractive(tab)
     end
 end
 
-local lastMouseoverTime = GetCurRealTime()
 function menu.onTableMouseOver(tab, row)
     if tab == menu.selectTableLeft or tab == menu.selectTableRight then
         kludgeSetInteractive(tab)
@@ -1629,6 +1588,15 @@ function menu.onSelectionChanged()
     menu.refreshDetailButton(rowData)
 end
 
+function menu.setDelayedRefresh(delay)
+    if not menu.nextRefreshTime then
+        menu.nextRefreshTime = C.GetCurrentGameTime()+delay;
+    else
+        menu.nextRefreshTime = math.max(menu.nextRefreshTime, C.GetCurrentGameTime()+delay);
+    end
+    DebugError("Delayed refresh time set at " .. menu.nextRefreshTime)
+end
+
 function menu.cleanup()
     UnregisterAddonBindings("ego_detailmonitor")
     
@@ -1669,6 +1637,7 @@ function menu.cleanup()
     menu.tradeButtonSellBuySwitch = nil
     menu.selectTableHeight = nil
     menu.lowResMode = nil
+    menu.nextRefreshTime = nil
 end
 
 init()

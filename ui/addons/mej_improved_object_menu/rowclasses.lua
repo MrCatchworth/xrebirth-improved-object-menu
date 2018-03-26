@@ -1,4 +1,15 @@
-local menu = ...
+-- local menu = ...
+
+local menu
+for k, otherMenu in pairs(Menus) do
+    if otherMenu.name == "MeJ_ImprovedObjectMenu" then
+        menu = otherMenu
+        break
+    end
+end
+if not menu then
+    error("Row class file: couldn't find the proper menu file to inject into!")
+end
 
 local ffi = require("ffi")
 local C = ffi.C
@@ -896,7 +907,6 @@ function rcShopList:display(setup, item, index)
         text = text .. "\n" .. location
     end
     
-    -- local textWidth = (Helper.standardSizeX/2) - 20
     local textWidth = menu.getMultiColWidth(1, 6)
     
     -- DebugError("Shopping list width: " .. textWidth)
@@ -905,6 +915,12 @@ function rcShopList:display(setup, item, index)
         Helper.createFontString(text, false, "left", 170, 170, 170, 100, Helper.standardFont, Helper.standardFontSize, true, nil, nil, 0, textWidth)
         --, Helper.standardSizeX/2 - menu.selectColWidths[1] - 7)
     }, self, {#menu.selectColWidths}, false, baseColor)
+end
+function rcShopList:getDetailButtonProps()
+    return self.category:getDetailButtonProps()
+end
+function rcShopList:onDetailButtonPress()
+    return self.category:onDetailButtonPress()
 end
 
 local rcUnit = menu.registerRowClass("unit")
