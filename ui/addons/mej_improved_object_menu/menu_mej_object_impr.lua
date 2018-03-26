@@ -284,8 +284,8 @@ catCrew.typeOrdering = {
     manager = 1,
     commander = 2,
     pilot = 3,
-    defencecontrol = 4,
-    engineer = 5,
+    engineer = 4,
+    defencecontrol = 5,
     architect = 6
 }
 function catCrew:init()
@@ -296,15 +296,24 @@ function catCrew:init()
     
     self.displayedNpcs = {}
     for k, npc in pairs(self.npcs) do
-        local isControlEntity, isPlayer = GetComponentData(npc, "iscontrolentity", "isplayerowned")
+        local isControlEntity, isPlayer, typeString = GetComponentData(npc, "iscontrolentity", "isplayerowned", "typestring")
         if isControlEntity or (menu.isPlayerOwned and isPlayer) then
-            table.insert(self.displayedNpcs, npc)
+            table.insert(self.displayedNpcs, {npc = npc, isControlEntity = isControlEntity, isPlayer = isPlayer, typeString = typeString})
         end
     end
-    table.insert(self.displayedNpcs, menu.buildingArchitect)
+    if menu.buildingArchitect then
+        table.insert(self.displayedNpcs, {npc = menu.buildingArchitect, isControlEntity = true, isPlayer = true, typeString = "architect"})
+    end
     
     table.sort(self.displayedNpcs, function(a, b)
-        local aType, bType = GetComponentData(a, "typestring"), GetComponentData(b, "typestring")
+        local aControl, bControl = a.isControlEntity, b.isControlEntity
+        
+        --npcs that are control entities go first
+        if aControl ~= bControl then
+            return aControl
+        end
+        
+        local aType, bType = a.typeString, b.typeString
         local aIndex, bIndex = self.typeOrdering[aType], self.typeOrdering[bType]
         
         --if both types are sorted, put them in that order
@@ -312,9 +321,9 @@ function catCrew:init()
             return aIndex < bIndex
         end
         
-        --if only one type is sorted, the npc with the unsorted type goes at the end
-        if not aIndex then return false end
-        if not bIndex then return true end
+        --if only one type is sorted, the npc with the sorted type goes first
+        if aIndex and not bIndex then return true end
+        if bIndex and not aIndex then return false end
         
         --if neither types are sorted, sort the types in alphabetical order
         return aType < bType

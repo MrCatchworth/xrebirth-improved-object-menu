@@ -1,7 +1,7 @@
 <diff>
     <replace sel="//cue[@name='OnInfoConversationStarted']/actions">
         <actions>
-            <include_actions ref="md.MEJ_ImprObjectMenu_Menu.ChoiceLib" />
+            <include_actions ref="md.MEJ_ImprObjectMenu_Menu.MenuActions" />
         </actions>
     </replace>
 </diff>

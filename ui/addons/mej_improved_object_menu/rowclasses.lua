@@ -483,11 +483,17 @@ function rcNpc:checkRangeWarning()
     end
 end
 
-function rcNpc:display(setup, npc)
-    self.npc = npc
+function rcNpc:display(setup, npcData)
+    local npc = npcData.npc
+    local typeString = npcData.typeString
+    local isControlEntity = npcData.isControlEntity
+    local isPlayer = npcData.isPlayer
     
-    local name, typeString, typeIcon, typeName, isControlEntity, combinedSkill, skillsKnown, isPlayer = GetComponentData(npc, "name", "typestring", "typeicon", "typename", "iscontrolentity", "combinedskill", "skillsvisible", "isplayerowned")
-    self.name, self.typeString = name, typeString
+    local name, typeIcon, typeName, combinedSkill, skillsKnown = GetComponentData(npc, "name", "typeicon", "typename", "combinedskill", "skillsvisible")
+    self.name = name
+    
+    self.npc = npc
+    self.typeString = typeString
     
     if isPlayer and menu.isPlayerOwned and (typeString == "manager" or typeString == "architect") then
         self.budgetWarning = self:checkBudgetWarning() or nil
@@ -515,7 +521,6 @@ function rcNpc:display(setup, npc)
         local skillVal = Helper.unlockInfo(skillsKnown, tostring(combinedSkillRank)) .. " / 5"
         skillCell = Helper.createFontString(skillVal, false, "center", skillColor.r, skillColor.g, skillColor.b, skillColor.a, Helper.standardFontBold)
     end
-    
     
     self.row = setup:addRow(true, {
         Helper.createIcon(typeIcon, false, nameColor.r, nameColor.g, nameColor.b, nameColor.a, 0, 0, Helper.standardTextHeight, Helper.standardButtonWidth),

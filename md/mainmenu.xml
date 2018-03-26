@@ -1,7 +1,7 @@
 <diff>
     <replace sel="//cue[@name='SectionHandler']/actions/do_elseif[contains(@value, 'gMain_object')][1]">
         <do_elseif value="event.param == 'gMain_object_closeup' or event.param == 'gMain_object'">
-            <include_actions ref="md.MEJ_ImprObjectMenu_Menu.ChoiceLib" />
+            <include_actions ref="md.MEJ_ImprObjectMenu_Menu.MenuActions" />
         </do_elseif>
     </replace>
 </diff>

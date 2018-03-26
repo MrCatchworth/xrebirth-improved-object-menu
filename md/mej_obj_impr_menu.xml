@@ -16,18 +16,24 @@
                     <add_conversation_view view="closeupdetailmonitor" />
                 </do_if>
                 <do_elseif value="event.param == 'MeJ_OpenObjectMenu'">
-                    <open_conversation_menu menu="MeJ_ImprovedObjectMenu"  param="event.param2" param2="event.param3"/>
+                    <open_conversation_menu menu="MeJ_ImprovedObjectMenu" param="event.param2" param2="event.param3"/>
                     <add_conversation_view view="closeupdetailmonitor"/>
                 </do_elseif>
             </actions>
         </cue>
         
         
-        <library name="ChoiceLib">
+        <library name="MenuActions">
             <actions>
-                <add_player_choice_sub text="'Vanilla Object Menu'" section="MeJ_VanillaObjectMenu" choiceparam="event.param2" baseparam="event.param2" />
-                <add_player_choice_sub text="'Jimble Object Menu'" section="MeJ_OpenObjectMenu" choiceparam="event.param2" baseparam="event.param2" />
-                <add_player_choice_return text="{1002,20}" position="bottom_right" comment="(Back)" />
+                <do_if value="false">
+                    <add_player_choice_sub text="'Vanilla Object Menu'" section="MeJ_VanillaObjectMenu" choiceparam="event.param2" baseparam="event.param2" />
+                    <add_player_choice_sub text="'Jimble Object Menu'" section="MeJ_OpenObjectMenu" choiceparam="event.param2" baseparam="event.param2" />
+                    <add_player_choice_return text="{1002,20}" position="bottom_right" comment="(Back)" />
+                </do_if>
+                <do_else>
+                    <open_conversation_menu menu="MeJ_ImprovedObjectMenu" param="event.param2" param2="event.param3"/>
+                    <add_conversation_view view="closeupdetailmonitor"/>
+                </do_else>
             </actions>
         </library>
     </cues>
