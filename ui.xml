@@ -2,6 +2,7 @@
 <addon name="mej_improved_object_menu" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../ui/core/addon.xsd">
   <environment type="detailmonitor">
     <file name="ui/addons/mej_improved_object_menu/menu_mej_object_impr.lua" />
+    <file name="ui/addons/mej_improved_object_menu/categories.lua" />
     <file name="ui/addons/mej_improved_object_menu/rowclasses.lua" />
     <dependency name="ego_detailmonitor" />
   </environment>

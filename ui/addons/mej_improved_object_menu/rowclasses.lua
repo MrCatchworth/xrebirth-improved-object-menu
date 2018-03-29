@@ -1,5 +1,3 @@
--- local menu = ...
-
 local menu
 for k, otherMenu in pairs(Menus) do
     if otherMenu.name == "MeJ_ImprovedObjectMenu" then
@@ -8,7 +6,7 @@ for k, otherMenu in pairs(Menus) do
     end
 end
 if not menu then
-    error("Row class file: couldn't find the proper menu file to inject into!")
+    error("Row class file: couldn't find the proper menu to inject into!")
 end
 
 local ffi = require("ffi")
@@ -292,14 +290,25 @@ function rcFuel:display(setup)
 end
 
 local rcBoardRes = menu.registerRowClass("boardingResistance")
+function rcBoardRes:getResistanceText()
+    if self.skunkStrength then
+        return tostring(self.res) .. " \27Z/ " .. tostring(self.skunkStrength)
+    else
+        return tostring(self.res)
+    end
+end
 function rcBoardRes:display(setup)
     if not menu.isBigShip then return end
     local res = GetComponentData(menu.object, "boardingresistance")
     self.res = res
     
+    if GetComponentData(menu.playerShip, "boardingnpc") then
+        self.skunkStrength = GetComponentData(menu.playerShip, "boardingstrength")
+    end
+    
     self.row = setup:addRow(true, {
         Helper.createFontString(ReadText(1001, 1324), false, "right"),
-        tostring(res)
+        self:getResistanceText()
     }, self, {3, 3})
 end
 rcBoardRes.updateInterval = 5
@@ -307,7 +316,7 @@ function rcBoardRes:update()
     local newRes = GetComponentData(menu.object, "boardingresistance")
     if newRes ~= self.res then
         self.res = newRes
-        Helper.updateCellText(self.tab, self.row, 4, tostring(newRes))
+        Helper.updateCellText(self.tab, self.row, 4, self:getResistanceText())
     end
 end
 
@@ -489,8 +498,8 @@ function rcNpc:display(setup, npcData)
     local isControlEntity = npcData.isControlEntity
     local isPlayer = npcData.isPlayer
     
-    local name, typeIcon, typeName, combinedSkill, skillsKnown = GetComponentData(npc, "name", "typeicon", "typename", "combinedskill", "skillsvisible")
-    self.name = name
+    local typeIcon, combinedSkill, skillsKnown = GetComponentData(npc, "typeicon", "combinedskill", "skillsvisible")
+    local name = npcData.fullName
     
     self.npc = npc
     self.typeString = typeString
@@ -1188,7 +1197,7 @@ function rcBuildModule:getProgressString()
         local _, _, progress = GetCurrentBuildSlot(buildAnchor)
         
         local macroName = GetMacroData(GetComponentData(buildAnchor, "macro"), "name")
-        return progress .. "%\27Z -- \27X" .. macroName
+        return math.floor(progress) .. "%\27Z -- \27X" .. macroName
     else
         return "\27Z--"
     end
