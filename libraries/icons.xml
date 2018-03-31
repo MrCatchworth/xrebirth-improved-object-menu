@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<diff>
+    <replace sel="//icon[@name='shipicon_fighter_s']">
+        <icon name="shipicon_fighter_s" texture="extensions\mej_improved_object_menu\assets\fx\gui\textures\shipicon\shipicon_fighter_s.tga" height="32" width="32"></icon>
+    </replace>
+    
+    <replace sel="//icon[@name='shipicon_destroyer_l']">
+        <icon name="shipicon_destroyer_l" texture="extensions\mej_improved_object_menu\assets\fx\gui\textures\shipicon\shipicon_destroyer_l.tga" height="32" width="32"></icon>
+    </replace>
+    
+    <replace sel="//icon[@name='shipicon_destroyer_xl']">
+        <icon name="shipicon_destroyer_xl" texture="extensions\mej_improved_object_menu\assets\fx\gui\textures\shipicon\shipicon_destroyer_xl.tga" height="32" width="32"></icon>
+    </replace>
+    
+    <replace sel="//icon[@name='shipicon_builder_l']">
+        <icon name="shipicon_builder_l" texture="extensions\mej_improved_object_menu\assets\fx\gui\textures\shipicon\shipicon_builder_l.tga" height="32" width="32"></icon>
+    </replace>
+    
+    <replace sel="//icon[@name='shipicon_fighter_m']">
+        <icon name="shipicon_fighter_m" texture="extensions\mej_improved_object_menu\assets\fx\gui\textures\shipicon\shipicon_fighter_m.tga" height="32" width="32"></icon>
+    </replace>
+    
+    <replace sel="//icon[@name='shipicon_freighter_l']">
+        <icon name="shipicon_freighter_l" texture="extensions\mej_improved_object_menu\assets\fx\gui\textures\shipicon\shipicon_freighter_l.tga" height="32" width="32"></icon>
+    </replace>
+    
+    <replace sel="//icon[@name='shipicon_freighter_m']">
+        <icon name="shipicon_freighter_m" texture="extensions\mej_improved_object_menu\assets\fx\gui\textures\shipicon\shipicon_freighter_m.tga" height="32" width="32"></icon>
+    </replace>
+    
+    <replace sel="//icon[@name='shipicon_freighter_xl']">
+        <icon name="shipicon_freighter_xl" texture="extensions\mej_improved_object_menu\assets\fx\gui\textures\shipicon\shipicon_freighter_xl.tga" height="32" width="32"></icon>
+    </replace>
+    
+    <replace sel="//icon[@name='shipicon_miner_ore_l']">
+        <icon name="shipicon_miner_ore_l" texture="extensions\mej_improved_object_menu\assets\fx\gui\textures\shipicon\shipicons_miner_ore_l.tga" height="32" width="32"></icon>
+    </replace>
+    
+    <replace sel="//icon[@name='shipicon_miner_ore_m']">
+        <icon name="shipicon_miner_ore_m" texture="extensions\mej_improved_object_menu\assets\fx\gui\textures\shipicon\shipicons_miner_ore_m.tga" height="32" width="32"></icon>
+    </replace>
+    
+    <replace sel="//icon[@name='shipicon_miner_ore_xl']">
+        <icon name="shipicon_miner_ore_xl" texture="extensions\mej_improved_object_menu\assets\fx\gui\textures\shipicon\shipicons_miner_ore_xl.tga" height="32" width="32"></icon>
+    </replace>
+    
+    <add sel="/icons">
+        <icon name="mej_miner" texture="extensions\mej_improved_object_menu\assets\fx\gui\textures\shipicon\shipicons_miner_ore_xl.tga" height="32" width="32"></icon>
+    </add>
+    <add sel="/icons">
+        <icon name="mej_station" texture="extensions\mej_improved_object_menu\assets\fx\gui\textures\shipicon\mej_station.tga" height="32" width="32"></icon>
+    </add>
+    <add sel="/icons">
+        <icon name="mej_jumpgate" texture="extensions\mej_improved_object_menu\assets\fx\gui\textures\shipicon\mej_jumpgate.tga" height="32" width="32"></icon>
+    </add>
+    <add sel="/icons">
+        <icon name="mej_jumpbeacon" texture="extensions\mej_improved_object_menu\assets\fx\gui\textures\shipicon\mej_jumpbeacon.tga" height="32" width="32"></icon>
+    </add>
+    <add sel="/icons">
+        <icon name="mej_multiselect" texture="extensions\mej_improved_object_menu\assets\fx\gui\textures\shipicon\mej_multiselect.tga" height="32" width="32"></icon>
+    </add>
+</diff>

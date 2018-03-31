@@ -203,7 +203,6 @@ local function setupColWidths()
     
     menu.selectColWidths = colWidths
 end
-    
 
 local function init()
 	Menus = Menus or { }
@@ -219,7 +218,8 @@ function menu.onShowMenu()
 	menu.unlocked = {}
 	menu.playerShip = GetPlayerPrimaryShipID()
 	menu.isPlayerShip = IsSameComponent(menu.object, menu.playerShip)
-	menu.isPlayerOwned = GetComponentData(menu.object, "isplayerowned")
+	menu.isPlayerOwned, menu.primaryPurpose = GetComponentData(menu.object, "isplayerowned", "primarypurpose")
+    menu.objectClass = ffi.string(C.GetComponentClass(ConvertIDTo64Bit(menu.object)))
 	menu.unlocked.name = IsInfoUnlockedForPlayer(menu.object, "name")
 	local object = menu.object
 	if IsComponentClass(object, "ship") then
@@ -289,7 +289,7 @@ function menu.onShowMenu()
     menu.buttonTableButtonWidth = (buttonTableButtonShare/buttonTableTotalShare) * buttonUsableWidth / 4
     menu.buttonTableSpacerWidth = (buttonTableSpacerShare/buttonTableTotalShare) * buttonUsableWidth / 5
     
-    menu.statusMessage = menu.statusMessage or "Ready"
+    menu.statusMessage = menu.statusMessage or ReadText(1001, 14)
     
     RegisterAddonBindings("ego_detailmonitor")
 
@@ -411,10 +411,18 @@ function menu.displayMenu(isFirstTime)
     end
     menu.objNameColor = titleColor
     
+    local titleFontSize
+    local titleTextHeight
+    if menu.lowResMode then
+        titleFontSize = 16
+    else
+        titleFontSize = 16
+    end
+    
     local setup = Helper.createTableSetup(menu)
     setup:addSimpleRow({
         Helper.createButton(nil, Helper.createButtonIcon("menu_info", nil, 255, 255, 255, 100), false),
-        Helper.createFontString(menu.title, false, "left", titleColor.r, titleColor.g, titleColor.b, titleColor.a, Helper.headerRow1Font, Helper.headerRow1FontSize, false, Helper.headerRow1Offsetx, Helper.headerRow1Offsety, Helper.headerRow1Height, Helper.headerRow1Width)
+        Helper.createFontString(menu.title, false, "left", titleColor.r, titleColor.g, titleColor.b, titleColor.a, Helper.headerRow1Font, titleFontSize, false, Helper.headerRow1Offsetx, Helper.headerRow1Offsety, Helper.headerRow1Height)
     }, nil, {1, #menu.selectColWidths-1}, false, Helper.defaultTitleBackgroundColor)
     
     setup:addTitleRow({ 
@@ -606,7 +614,7 @@ end
 menu.updateInterval = 0.1
 function menu.onUpdate()
     if menu.nowDisplaying then
-        DebugError("Error detected while displaying Improved Object Menu!")
+        DebugError("Error detected while displaying Improved Object Menu! Please contact MegaJohnny with the relevant error messages")
         menu.updateInterval = 3600
         return
     end
@@ -616,7 +624,6 @@ function menu.onUpdate()
     local timeNow = C.GetCurrentGameTime()
     
     if menu.nextRefreshTime and menu.nextRefreshTime < timeNow then
-        DebugError("Delayed refresh has now triggered!")
         menu.nextRefreshTime = nil
         menu.displayMenu()
         return
@@ -697,7 +704,6 @@ end
 menu.ignoreRowChange = 0
 function menu.onRowChanged(row, rowData, tab)
     if menu.ignoreRowChange > 0 then
-        --DebugError("False row change")
         menu.ignoreRowChange = menu.ignoreRowChange - 1
         return
     end
@@ -746,7 +752,7 @@ function menu.onSelectionChanged()
     local row = Helper.currentTableRow[tab]
     local rowData = menu.rowDataColumns[tab][row]
     
-    menu.updateStatusMessage()
+    -- menu.updateStatusMessage()
     menu.refreshDetailButton(rowData)
 end
 
@@ -756,7 +762,6 @@ function menu.setDelayedRefresh(delay)
     else
         menu.nextRefreshTime = math.max(menu.nextRefreshTime, C.GetCurrentGameTime()+delay);
     end
-    DebugError("Delayed refresh time set at " .. menu.nextRefreshTime)
 end
 
 function menu.cleanup()

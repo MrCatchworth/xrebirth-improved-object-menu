@@ -49,16 +49,76 @@ ffi.cdef[[
 	bool IsVRVersion(void);
 	void SetPlayerCameraCockpitView(bool force);
 	void SetPlayerCameraTargetView(UniverseID targetid, bool force);
+    const char* GetComponentClass(UniverseID componentid);
 ]]
 
+--Helper Functions
+--==========================================================================
+local function getShipIconName(class, purpose)
+    if class == "ship_xs" then
+        if purpose == "fight" then
+            return "shipicon_drone_combat"
+        else
+            return "shipicon_drone_transport"
+        end
+        
+    elseif class == "ship_s" then
+        return "shipicon_fighter_s"
+        
+    elseif class == "ship_m" then
+        if purpose == "fight" then
+            return "shipicon_fighter_m"
+        elseif purpose == "trade" then
+            return "shipicon_freighter_m"
+        elseif purpose == "mine" then
+            return "shipicon_miner_ore_m"
+        end
+        
+    elseif class == "ship_l" then
+        if purpose == "fight" then
+            return "shipicon_destroyer_l"
+        elseif purpose == "build" then
+            return "shipicon_builder_l"
+        elseif purpose == "mine" then
+            return "shipicon_miner_ore_l"
+        else
+            return "shipicon_freighter_l"
+        end
+        
+    elseif class == "ship_xl" then
+        if purpose == "fight" then
+            return "shipicon_destroyer_xl"
+        elseif purpose == "mine" then
+            return "shipicon_miner_ore_xl"
+        else
+            return "shipicon_freighter_xl"
+        end
+        
+    end
+    
+    return "workshop_error"
+end
+
+local function createShipIcon(shipClass, purpose, color)
+    local iconName = getShipIconName(shipClass, purpose)
+    local iconCellWidth = menu.selectColWidths[1]
+    local iconSize = Helper.standardTextHeight
+    return Helper.createIcon(iconName, false, color.r, color.g, color.b, color.a, (iconCellWidth-iconSize)/2, 0, iconSize, iconSize)
+end
+
+--==========================================================================
 local rcName = menu.registerRowClass("name")
 function rcName:display(setup)
-    local tradeSubCell = ""
-    if menu.type ~= "ship" and GetComponentData(menu.object, "tradesubscription") then
-        tradeSubCell = Helper.createIcon("menu_eye", false, 255, 255, 255, 100, 0, 0, Helper.standardTextHeight, Helper.standardButtonWidth)
+    local iconCell = ""
+    
+    if menu.type == "ship" then
+        iconCell = createShipIcon(menu.objectClass, menu.primaryPurpose, menu.objNameColor)
+    elseif menu.type == "station" and GetComponentData(menu.object, "tradesubscription") then
+        iconCell = Helper.createIcon("menu_eye", false, 255, 255, 255, 100, 0, 0, Helper.standardTextHeight, Helper.standardButtonWidth)
     end
+    
     self.row = setup:addRow(true, {
-        tradeSubCell,
+        iconCell,
         Helper.createFontString(Helper.unlockInfo(menu.unlocked.name, GetComponentData(menu.object, "name")), false, "center", menu.objNameColor.r, menu.objNameColor.g, menu.objNameColor.b, menu.objNameColor.a)
     }, self, {1, #menu.selectColWidths-1})
 end
@@ -72,6 +132,7 @@ function rcName:onDetailButtonPress()
     Helper.closeMenuForSubSection(menu, false, "gMain_rename", { 0, 0, menu.object })
 end
 
+--==========================================================================
 local rcFaction = menu.registerRowClass("faction")
 function rcFaction:display(setup)
     self.faction = GetComponentData(menu.object, "owner")
@@ -104,6 +165,7 @@ function rcFaction:onDetailButtonPress()
     Helper.closeMenuForSubSection(menu, false, "gEncyclopedia_faction", {0, 0, self.faction})
 end
 
+--==========================================================================
 local rcCommander = menu.registerRowClass("commander")
 function rcCommander:display(setup)
     if menu.type ~= "ship" then return end
@@ -144,6 +206,7 @@ local function getStatusBar(frac, height, width, color)
     return Helper.createIcon("solid", false, color.r, color.g, color.b, color.a, 0, 0, height, frac * width)
 end
 
+--==========================================================================
 local rcPartOf = menu.registerRowClass("partOf")
 function rcPartOf:display(setup)
     if menu.type ~= "block" then return end
@@ -173,6 +236,7 @@ function rcPartOf:onDetailButtonPress()
     Helper.closeMenuForSubSection(menu, false, "gMain_object", { 0, 0, menu.container })
 end
 
+--==========================================================================
 local rcHullShield = menu.registerRowClass("hullShield")
 rcHullShield.updateInterval = 1
 function rcHullShield:getVals()
@@ -211,6 +275,7 @@ function rcHullShield:update(tab, row)
     end
 end
 
+--==========================================================================
 local rcEfficiency = menu.registerRowClass("efficiency")
 function rcEfficiency:display(setup)
     if menu.type ~= "block" then return end
@@ -225,6 +290,7 @@ function rcEfficiency:display(setup)
     }, self, {3, 3})
 end
 
+--==========================================================================
 local rcEngine = menu.registerRowClass("engine")
 function rcEngine:getSpeedString()
     return ConvertIntegerString(self.speed, true, nil, true) .. " " .. ReadText(1001, 107) .. "/" .. ReadText(1001, 100)
@@ -265,6 +331,7 @@ function rcEngine:update()
     end
 end
 
+--==========================================================================
 local rcFuel = menu.registerRowClass("fuel")
 function rcFuel:display(setup)
     if menu.type ~= "ship" then return end
@@ -289,6 +356,7 @@ function rcFuel:display(setup)
     }, self, {3, 3})
 end
 
+--==========================================================================
 local rcBoardRes = menu.registerRowClass("boardingResistance")
 function rcBoardRes:getResistanceText()
     if self.skunkStrength then
@@ -320,6 +388,7 @@ function rcBoardRes:update()
     end
 end
 
+--==========================================================================
 local rcBoardStr = menu.registerRowClass("boardingStrength")
 function rcBoardStr:display(setup)
     if not (menu.isPlayerShip and GetComponentData(menu.object, "boardingnpc")) then return end
@@ -331,6 +400,7 @@ function rcBoardStr:display(setup)
     }, self, {3, 3})
 end
 
+--==========================================================================
 local rcWare = menu.registerRowClass("ware")
 function rcWare:getWareAmountCell()
     local mot
@@ -413,6 +483,7 @@ function rcWare:updateAmount(newAmount)
     end
 end
 
+--==========================================================================
 local rcNpc = menu.registerRowClass("npc")
 function rcNpc:getCommandString()
     local accountString = ""
@@ -504,9 +575,13 @@ function rcNpc:display(setup, npcData)
     self.npc = npc
     self.typeString = typeString
     
-    if isPlayer and menu.isPlayerOwned and (typeString == "manager" or typeString == "architect") then
-        self.budgetWarning = self:checkBudgetWarning() or nil
-        self.rangeWarning = self:checkRangeWarning() or nil
+    if isPlayer and menu.isPlayerOwned then
+        if typeString == "manager" or typeString == "architect" then
+            self.budgetWarning = self:checkBudgetWarning() or nil
+        end
+        if typeString == "manager" then
+            self.rangeWarning = self:checkRangeWarning() or nil
+        end
     end
     
     local nameMot
@@ -571,6 +646,7 @@ function rcNpc:onDetailButtonPress()
     Helper.closeMenuForSubSection(menu, false, "gMain_charOrders", { 0, 0, self.npc })
 end
 
+--==========================================================================
 local rcLocation = menu.registerRowClass("location")
 rcLocation.updateInterval = 1
 function rcLocation:display(setup)
@@ -627,6 +703,7 @@ function rcLocation:onDetailButtonPress()
     end
 end
 
+--==========================================================================
 local rcUpkeepMission = menu.registerRowClass("upkeepMission")
 function rcUpkeepMission:display(setup, mission)
     self.mission = mission
@@ -642,6 +719,7 @@ function rcUpkeepMission:display(setup, mission)
     }, self, {1, #menu.selectColWidths-1})
 end
 
+--==========================================================================
 local rcUpgrade = menu.registerRowClass("upgrade")
 function rcUpgrade:getOperationalInfo()
     local color
@@ -679,6 +757,7 @@ function rcUpgrade:updateVal(newVal)
     end
 end
 
+--==========================================================================
 local rcWeapon = menu.registerRowClass("weapon")
 rcWeapon.colors = {}
 rcWeapon.colors["inv_weaponmod_t1"] = {r = 30, g = 255, b = 0, a = 100}
@@ -690,7 +769,7 @@ function rcWeapon:display(setup, weapon, weaponMod)
     local color
     if weaponMod then
         local ware = ffi.string(weaponMod.Ware)
-        color = self.colors[ware]
+        color = self.colors[ware] or menu.white
     else
         color = menu.white
     end
@@ -707,6 +786,7 @@ function rcWeapon:applyScripts(tab, row)
     end)
 end
 
+--==========================================================================
 local rcMissile = menu.registerRowClass("missile")
 function rcMissile:display(setup, missile)
     self.missile = missile
@@ -724,6 +804,7 @@ function rcMissile:applyScripts(tab, row)
     end)
 end
 
+--==========================================================================
 local rcAmmo = menu.registerRowClass("ammo")
 function rcAmmo:getAmountText()
     return Helper.unlockInfo(self.category.defStatusKnown, tostring(self.ammo.amount))
@@ -733,19 +814,21 @@ function rcAmmo:display(setup, ammo)
     self.name = GetWareData(ammo.ware, "name")
     
     self.row = setup:addRow(true, {
-        self.name,
+        Helper.createFontString(self.name, false, "right"),
         self:getAmountText()
-    }, self, {4, 2})
+    }, self, {3, 3})
 end
 function rcAmmo:updateVal(newVal)
     if self.category.defStatusKnown then
         if newVal.amount ~= self.ammo.amount then
             self.ammo.amount = newVal.amount
-            SetCellContent(self.tab, self:getAmountText(), self.row, 5)
+            -- SetCellContent(self.tab, self:getAmountText(), self.row, 5)
+            Helper.updateCellText(self.tab, self.row, 4, self:getAmountText())
         end
     end
 end
 
+--==========================================================================
 local rcProduction = menu.registerRowClass("production")
 function rcProduction:getTimeText()
     local t = self.data.remainingtime
@@ -845,6 +928,7 @@ function rcProduction:onDetailButtonPress()
     Helper.closeMenuForSubSection(menu, false, "gMain_objectProduction", { 0, 0, menu.object, self.module })
 end
 
+--==========================================================================
 local rcShopList = menu.registerRowClass("shoppingList")
 rcShopList.colorBuy = {r = 66, g = 92, b = 111, a = 60}
 rcShopList.colorSell = {r = 82, g = 122, b = 108, a = 60}
@@ -937,6 +1021,7 @@ function rcShopList:onDetailButtonPress()
     return self.category:onDetailButtonPress()
 end
 
+--==========================================================================
 local rcUnit = menu.registerRowClass("unit")
 function rcUnit:display(setup, unit)
     self.unit = unit
@@ -970,6 +1055,7 @@ function rcUnit:updateUnit(newUnit)
     end
 end
 
+--==========================================================================
 local rcPlayerDrone = menu.registerRowClass("playerDrone")
 function rcPlayerDrone:display(setup, drone)
     self.drone = drone
@@ -991,6 +1077,7 @@ function rcPlayerDrone:applyScripts(tab, row)
     end)
 end
 
+--==========================================================================
 local rcPersonnel = menu.registerRowClass("personnel")
 function rcPersonnel:display(setup)
     if menu.type ~= "station" then return end
@@ -1020,6 +1107,7 @@ function rcPersonnel:onDetailButtonPress()
     Helper.closeMenuForSubSection(menu, false, "gMain_objectPlatforms", { 0, 0, menu.object })
 end
 
+--==========================================================================
 local rcJumpdrive = menu.registerRowClass("jumpdrive")
 function rcJumpdrive:assessState()
     local exists, charging, busy, nextJump = GetComponentData(menu.object, "hasjumpdrive", "isjumpdrivecharging", "isjumpdrivebusy", "nextjumptime")
@@ -1079,6 +1167,7 @@ function rcJumpdrive:update(tab, row)
     end
 end
 
+--==========================================================================
 local rcPlayerUpgrade = menu.registerRowClass("playerUpgrade")
 function rcPlayerUpgrade:display(setup, upgrade, factor)
     self.row = setup:addRow( true, {
@@ -1088,6 +1177,7 @@ function rcPlayerUpgrade:display(setup, upgrade, factor)
     }, self, {1, 4, 1})
 end
 
+--==========================================================================
 local rcSubordinate = menu.registerRowClass("subordinate")
 function rcSubordinate:getCommandString()
     if not self.pilot then return end
@@ -1108,23 +1198,28 @@ end
 function rcSubordinate:display(setup, ship)
     self.ship = ship
     
-    local isPlayer, isEnemy, name, pilot = GetComponentData(ship, "isplayerowned", "isenemy", "name", "pilot")
+    local isPlayer, isEnemy, name, pilot, purpose = GetComponentData(ship, "isplayerowned", "isenemy", "name", "pilot", "primarypurpose")
     
-    self.name, self.pilot = name, pilot
+    self.name, self.pilot, self.purpose = name, pilot, purpose
     
+    local color
     if isPlayer then
-        self.color = menu.holomapColor.playerColor
+        color = menu.holomapColor.playerColor
     elseif isEnemy then
-        self.color = menu.holomapColor.enemyColor
+        color = menu.holomapColor.enemyColor
     else
-        self.color = menu.holomapColor.friendColor
+        color = menu.holomapColor.friendColor
     end
     
     self.commandString = self:getCommandString()
     
+    self.class = ffi.string(C.GetComponentClass(ConvertIDTo64Bit(self.ship)))
+    local iconCellWidth = menu.selectColWidths[1]
+    local iconSize = Helper.standardTextHeight
+    
     self.row = setup:addRow(true, {
-        "",
-        Helper.createFontString(self:getMainString(), false, "left", self.color.r, self.color.g, self.color.b, self.color.a)
+        createShipIcon(self.class, self.purpose, color),
+        Helper.createFontString(self:getMainString(), false, "left", color.r, color.g, color.b, color.a)
     }, self, {1, 5})
 end
 rcSubordinate.updateInterval = 5
@@ -1133,6 +1228,7 @@ function rcSubordinate:update()
     
     if not IsComponentOperational(self.ship) then
         self.destroyed = true
+        SetCellContent(self.tab, createShipIcon(self.class, self.purpose, menu.lightGrey), self.row, 1)
         Helper.updateCellText(self.tab, self.row, 2, self:getMainString(), menu.lightGrey)
         return
     end
@@ -1156,6 +1252,7 @@ function rcSubordinate:onDetailButtonPress()
     Helper.closeMenuForSubSection(menu, false, "gMain_object", { 0, 0, self.ship })
 end
 
+--==========================================================================
 local rcEconomy = menu.registerRowClass("economy")
 function rcEconomy:display(setup)
     if not ((menu.type == "station" or (menu.type == "ship" and GetBuildAnchor(menu.object))) and (GetComponentData(menu.object, "tradesubscription") or menu.isPlayerOwned)) then
@@ -1188,6 +1285,7 @@ function rcEconomy:onDetailButtonPress()
     self:viewStats()
 end
 
+--==========================================================================
 local rcBuildModule = menu.registerRowClass("buildModule")
 function rcBuildModule:getProgressString()
     if self.dead or not self.nameKnown then return "\27Z--" end

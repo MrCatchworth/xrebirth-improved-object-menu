@@ -912,7 +912,7 @@ function catBuildModules:scanBuildStage(sequence, stage)
     local seqModules = GetBuildStageModules(menu.object, sequence, stage)
     for k, moduleData in ipairs(seqModules) do
         if moduleData.library == "moduletypes_build" and moduleData.component and IsComponentOperational(moduleData.component) then
-            DebugError("Here is a build module called " .. GetComponentData(moduleData.component, "name") .. "! (" .. tostring(moduleData.component) .. ")")
+            -- DebugError("Here is a build module called " .. GetComponentData(moduleData.component, "name") .. "! (" .. tostring(moduleData.component) .. ")")
             table.insert(self.modules, moduleData.component)
         end
     end
