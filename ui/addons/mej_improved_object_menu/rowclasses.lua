@@ -668,6 +668,7 @@ function rcLocation:getLocationText()
     local sector = GetContextByClass(menu.object, "sector", false)
     local cluster = GetContextByClass(menu.object, "cluster", false)
     
+    self.isRenameButton = menu.isPlayerOwned and menu.type == "station" and GetComponentData(GetComponentData(menu.object, "zoneid"), "istemporaryzone")
     
     local locText = GetComponentData(zone, "name")
     if sector then
@@ -681,8 +682,6 @@ function rcLocation:update(tab, row)
     if menu.type == "station" or not menu.unlocked.name then return end
     
     local newZone = GetContextByClass(menu.object, "zone", false)
-    
-    self.isRenameButton = menu.isPlayerOwned and menu.type == "station" and GetComponentData(GetComponentData(menu.object, "zoneid"), "istemporaryzone")
     
     if not IsSameComponent(self.zone, newZone) then
         self.zone = newZone

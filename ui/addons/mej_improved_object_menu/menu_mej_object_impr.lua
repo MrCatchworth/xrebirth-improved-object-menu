@@ -210,6 +210,22 @@ local function init()
 	if Helper then
 		Helper.registerMenu(menu)
 	end
+    
+    --attempt to replace vanilla ObjectMenu
+    local objectMenu
+    for k, otherMenu in pairs(Menus) do
+        if otherMenu.name == "ObjectMenu" then
+            objectMenu = otherMenu
+            break
+        end
+    end
+    if objectMenu then
+        Helper.unregisterMenu(objectMenu)
+        RegisterEvent("showObjectMenu", menu.showMenuCallback)
+        RegisterEvent("showNonInteractiveObjectMenu", menu.showNonInteractiveMenuCallback)
+    else
+        error("Improved Object Menu: Failed to find vanilla ObjectMenu to replace!")
+    end
 end
 
 function menu.onShowMenu()
@@ -732,10 +748,12 @@ end
 function menu.onCloseElement(dueToClose)
 	if dueToClose == "close" then
 		Helper.closeMenuAndCancel(menu)
-		menu.cleanup()
 	else
-		Helper.closeMenuAndReturn(menu)
-		menu.cleanup()
+        if menu.param[4] and IsValidComponent(menu.object) then
+            Helper.closeMenuAndReturn(menu, false, { nil, 0, "zone", GetContextByClass(menu.object, "zone"), menu.param[4], menu.object })
+        else
+            Helper.closeMenuAndReturn(menu)
+        end
 	end
 end
 

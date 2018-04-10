@@ -26,3 +26,10 @@ If you press the comm hotkey, and a crew member is selected, it will initiate co
 - Reduced font size on menu title (since it is only half as wide now)
 - Fixed when viewing a CV, the architect could show the operational range warning
 - Fixed some unnecessary debuglog output
+
+ 1.1: 2018-04-10
+- Add `save="false"` to content.xml, can be safely removed from save games
+- Change the way the vanilla object menu is replaced, improving compatibility
+- Add headers to turret/weapon/missile display
+- Fix bug where cargo wouldn't be displayed if it was only empty resources (e.g. immediately after station construction)
+- Fix bug where returning to map from the menu wouldn't carry the history over

@@ -176,7 +176,7 @@ function catCargo:init()
     self.waresKnown = IsInfoUnlockedForPlayer(menu.object, "storage_warelist") or otherCase
     
     self.visible = cap > 0
-    self.enabled = (stored > 0 or self.rawStorage.estimated) and self.waresKnown
+    self.enabled = (self.wareCount > 0 or self.rawStorage.estimated) and self.waresKnown
     
     self.unit = " " .. ReadText(1001, 110)
     
@@ -479,39 +479,67 @@ function catArms:init()
     self.enabled = enable
 end
 function catArms:display(setup)
+    local ammoHeaderAdded = false
+    
     self.upgradeRows = {}
     self.fixedTurretRows = {}
     self.ammoRows = {}
     if not menu.isPlayerShip then
+        
+        local upgradeHeaderAdded = false
         for ut, upgrade in Helper.orderedPairs(self.upgrades) do
             if type(upgrade) == "table" and upgrade.total > 0 then
+                if not upgradeHeaderAdded then
+                    upgradeHeaderAdded = true
+                    setup:addRow(false, {"", ReadText(1001, 1311), ReadText(1001, 1322)}, nil, {3, 2, 1}, false, Helper.defaultHeaderBackgroundColor)
+                end
                 self.upgradeRows[ut] = self:addItem(setup, menu.rowClasses.upgrade, upgrade, self.estimated)
             end
         end
+        
         for macro, turret in pairs(self.fixedTurrets) do
             if type(turret) == "table" and turret.operational > 0 then
+                if not upgradeHeaderAdded then
+                    upgradeHeaderAdded = true
+                    setup:addRow(false, {"", ReadText(1001, 1311), ReadText(1001, 1322)}, nil, {3, 2, 1}, false, Helper.defaultHeaderBackgroundColor)
+                end
                 self.fixedTurretRows[macro] = self:addItem(setup, menu.rowClasses.upgrade, turret, self.fixedTurrets.estimated)
             end
         end
+        
     end
+    
+    local weaponHeaderAdded = false
     for k, weapon in ipairs(self.armament.weapons) do
         local ffiMod = ffi.new("UIWeaponMod")
         local retVal = C.GetInstalledWeaponMod(ConvertIDTo64Bit(weapon.component), ffiMod)
         if not retVal then
             ffiMod = nil
         end
+        if not weaponHeaderAdded then
+            weaponHeaderAdded = true
+            setup:addRow(false, {"", ReadText(1001, 1303), ReadText(1001, 1302)}, nil, {3, 2, 1}, false, Helper.defaultHeaderBackgroundColor)
+        end
         self:addItem(setup, menu.rowClasses.weapon, weapon, ffiMod)
         AddKnownItem("weapontypes_primary", weapon.macro)
     end
+    
+    local missileHeaderAdded = false
     for k, missile in ipairs(self.armament.missiles) do
+        if not missileHeaderAdded then
+            missileHeaderAdded = true
+            setup:addRow(false, {ReadText(1001, 1304), ReadText(1001, 1306), menu.isPlayerShip and ReadText(1001, 1202) or ""}, nil, {3, 2, 1}, false, Helper.defaultHeaderBackgroundColor)
+        end
         self:addItem(setup, menu.rowClasses.missile, missile)
         AddKnownItem("weapontypes_secondary", missile.macro)
     end
+    
     if not menu.isPlayerShip then
         for ware, ammo in pairs(self.ammo) do
             self.ammoRows[ware] = self:addItem(setup, menu.rowClasses.ammo, ammo)
         end
     end
+    
 end
 catArms.updateInterval = 2
 function catArms:update()
