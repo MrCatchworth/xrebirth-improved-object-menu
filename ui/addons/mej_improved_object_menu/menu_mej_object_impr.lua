@@ -212,6 +212,7 @@ local function init()
 	end
     
     --attempt to replace vanilla ObjectMenu
+    --[[
     local objectMenu
     for k, otherMenu in pairs(Menus) do
         if otherMenu.name == "ObjectMenu" then
@@ -226,6 +227,29 @@ local function init()
     else
         error("Improved Object Menu: Failed to find vanilla ObjectMenu to replace!")
     end
+    ]]
+    
+    --spoof register ourselves as the vanilla object menu
+    RegisterEvent("showObjectMenu", menu.showMenuCallback)
+    RegisterEvent("showNonInteractiveObjectMenu", menu.showNonInteractiveMenuCallback)
+    
+    --somewhat strange hack to override other mods (e.g. xsalvation) that also register themselves for the object menu
+    --i have to do it in an update handler because that menu might be loaded after this one
+    SetScript("onUpdate", scrubObjectMenus)
+end
+
+function scrubObjectMenus()
+    DebugError("Starting to scrub object menus")
+    
+    for k, otherMenu in pairs(Menus) do
+        if otherMenu.name == "ObjectMenu" then
+            DebugError("Scrubbing an object menu...")
+            Helper.unregisterMenu(otherMenu)
+        end
+    end
+    
+    DebugError("Done scrubbing")
+    RemoveScript("onUpdate", scrubObjectMenus)
 end
 
 function menu.onShowMenu()
