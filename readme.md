@@ -19,19 +19,17 @@ The details button (hotkey 4) is derived from the current row in the last column
 If you press the comm hotkey, and a crew member is selected, it will initiate comm with that crew member. Otherwise, it will comm the object as normal.
 
 # Changes
-  1.11: 2018-04-22
+1.11: 2018-04-22
 - Improve compatibility with other mods that change the object menu (particularly xsalvation)
 
-
-  1.1: 2018-04-10
+1.1: 2018-04-10
 - Add `save="false"` to content.xml, can be safely removed from save games
 - Change the way the vanilla object menu is replaced, improving compatibility
 - Add headers to turret/weapon/missile display
 - Fix bug where cargo wouldn't be displayed if it was only empty resources (e.g. immediately after station construction)
 - Fix bug where returning to map from the menu wouldn't carry the history over
 
-
-  1.0: 2018-04-01
+1.0: 2018-04-01
 - Boarding resistance also shows the Skunk's boarding strength in grey, if applicable, for comparison
 - Subordinate ships have an appropriate icon like the one from the map -- if the object being viewed is a ship, you also see an icon for that next to the name
 - Subordinate ships are grouped by the NPC they work for
