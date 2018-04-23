@@ -239,16 +239,16 @@ local function init()
 end
 
 function scrubObjectMenus()
-    DebugError("Starting to scrub object menus")
+    -- DebugError("Starting to scrub object menus")
     
     for k, otherMenu in pairs(Menus) do
         if otherMenu.name == "ObjectMenu" then
-            DebugError("Scrubbing an object menu...")
+            -- DebugError("Scrubbing an object menu...")
             Helper.unregisterMenu(otherMenu)
         end
     end
     
-    DebugError("Done scrubbing")
+    -- DebugError("Done scrubbing")
     RemoveScript("onUpdate", scrubObjectMenus)
 end
 
@@ -449,6 +449,8 @@ function menu.displayMenu(isFirstTime)
     else
         titleColor = menu.holomapColor.friendColor
     end
+    --for testing version: make it very obvious this is not the normal version!
+    -- titleColor = {r = 255, g = 0, b = 255, a = 100}
     menu.objNameColor = titleColor
     
     local titleFontSize

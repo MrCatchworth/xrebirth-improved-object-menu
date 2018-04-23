@@ -1,4 +1,4 @@
 <?xml version="1.0" encoding="iso-8859-1"?>
-<content id="mej_improved_object_menu" save="false" name="Improved Object Menu" description="Full overhaul of the object details menu for improved information and readability" author="MegaJohnny" version="110" date="2018-04-10" lastupdate="1428141004">
+<content id="mej_improved_object_menu" save="false" name="Improved Object Menu" description="Full overhaul of the object details menu for improved information and readability" author="MegaJohnny" version="111" date="2018-04-22" lastupdate="1428141004">
     <dependency version="430"></dependency>
 </content>
