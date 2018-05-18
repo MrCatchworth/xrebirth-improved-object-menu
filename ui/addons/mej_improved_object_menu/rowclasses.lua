@@ -988,7 +988,15 @@ function rcShopList:display(setup, item, index)
         if item.isbuyoffer and item.station then
             local trade = GetTradeData(item.id)
             local profit = GetReferenceProfit(menu.object, trade.ware, item.price, item.amount, index - 1)
-            template = template .. "\n" .. string.format(ReadText(1001, 6203), "\27G" .. (profit and ConvertMoneyString(profit, false, true, 6, true) or ReadText(1001, 2672)) .. "\27X " .. ReadText(1001, 101))
+            local profitChar = "\27C"
+            if profit then
+                if profit > 0 then
+                    profitChar = "\27G"
+                elseif profit < 0 then
+                    profitChar = "\27R"
+                end
+            end
+            template = template .. "\n" .. string.format(ReadText(1001, 6203), profitChar .. (profit and ConvertMoneyString(profit, false, true, 6, true) or ReadText(1001, 2672)) .. "\27X " .. ReadText(1001, 101))
         end
         
         local locTemplate = "%s -- %s / %s / %s"
@@ -1293,8 +1301,10 @@ function rcBuildModule:getProgressString()
     if buildAnchor then
         local _, _, progress = GetCurrentBuildSlot(buildAnchor)
         
-        local macroName = GetMacroData(GetComponentData(buildAnchor, "macro"), "name")
-        return math.floor(progress) .. "%\27Z -- \27X" .. macroName
+        local macroId, isPlayer, isEnemy = GetComponentData(buildAnchor, "macro", "isplayerowned", "isenemy")
+        local relationChar = relationColorCode(isPlayer, isEnemy)
+        local macroName = GetMacroData(macroId, "name")
+        return math.floor(progress) .. "%\27Z -- " .. relationChar .. macroName
     else
         return "\27Z--"
     end

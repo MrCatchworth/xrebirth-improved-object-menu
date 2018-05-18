@@ -238,7 +238,7 @@ local function init()
     SetScript("onUpdate", scrubObjectMenus)
 end
 
-function scrubObjectMenus()
+local function scrubObjectMenus()
     -- DebugError("Starting to scrub object menus")
     
     for k, otherMenu in pairs(Menus) do
