@@ -204,6 +204,20 @@ local function setupColWidths()
     menu.selectColWidths = colWidths
 end
 
+local function scrubObjectMenus()
+    -- DebugError("Starting to scrub object menus")
+    
+    for k, otherMenu in pairs(Menus) do
+        if otherMenu.name == "ObjectMenu" then
+            -- DebugError("Scrubbing an object menu...")
+            Helper.unregisterMenu(otherMenu)
+        end
+    end
+    
+    -- DebugError("Done scrubbing")
+    RemoveScript("onUpdate", scrubObjectMenus)
+end
+
 local function init()
 	Menus = Menus or { }
 	table.insert(Menus, menu)
@@ -236,20 +250,6 @@ local function init()
     --somewhat strange hack to override other mods (e.g. xsalvation) that also register themselves for the object menu
     --i have to do it in an update handler because that menu might be loaded after this one
     SetScript("onUpdate", scrubObjectMenus)
-end
-
-local function scrubObjectMenus()
-    -- DebugError("Starting to scrub object menus")
-    
-    for k, otherMenu in pairs(Menus) do
-        if otherMenu.name == "ObjectMenu" then
-            -- DebugError("Scrubbing an object menu...")
-            Helper.unregisterMenu(otherMenu)
-        end
-    end
-    
-    -- DebugError("Done scrubbing")
-    RemoveScript("onUpdate", scrubObjectMenus)
 end
 
 function menu.onShowMenu()
