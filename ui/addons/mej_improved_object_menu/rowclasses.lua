@@ -1304,7 +1304,7 @@ function rcBuildModule:getProgressString()
         local macroId, isPlayer, isEnemy = GetComponentData(buildAnchor, "macro", "isplayerowned", "isenemy")
         local relationChar = relationColorCode(isPlayer, isEnemy)
         local macroName = GetMacroData(macroId, "name")
-        return math.floor(progress) .. "%\27Z -- " .. relationChar .. macroName
+        return math.floor(progress or 0) .. "%\27Z -- " .. relationChar .. macroName
     else
         return "\27Z--"
     end
