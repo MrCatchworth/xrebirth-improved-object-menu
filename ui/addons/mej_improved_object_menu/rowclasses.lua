@@ -409,7 +409,10 @@ function rcWare:getWareAmountCell()
     --decide the color of the amount, and whether there should be any "x / y" bit
     if self.ware.amount == 0 then
             amountString = "\27Z" .. amountString .. "\27X"
-    elseif menu.isPlayerOwned then
+    
+    --as per bitvoid's bug report, somehow isPlayerOwned can be truthy
+    --for now, don't remove the explicit 'true' comparison!
+    elseif menu.isPlayerOwned == true and menu.type ~= "block" then
         self.isFull = next(self.category.productCycleAmounts) and (GetWareCapacity(menu.object, self.ware.ware, false) <= self.cycleAmount or (self.limit - self.cycleAmount) < self.ware.amount)
         if self.isFull then
             if self.cycleAmount > 0 then
@@ -881,7 +884,7 @@ function rcProduction:display(setup, module)
     
     local productText
     local iconCell = ""
-    if data.products then
+    if data.products and data.products[1] ~= nil then
         local product = data.products[1]
         productText = "\27Z" .. ConvertIntegerString(product.cycle * 3600 / data.cycletime, true, 4, true) .. "x\27X" .. product.name
         if self.effKnown then
@@ -892,7 +895,6 @@ function rcProduction:display(setup, module)
     end
     
     self.lastState = data.state
-    self.lastWare = data.products and data.products[1].ware
     
     self.row = setup:addRow(true, {
         iconCell,

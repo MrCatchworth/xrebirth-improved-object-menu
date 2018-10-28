@@ -19,6 +19,9 @@ The details button (hotkey 4) is derived from the current row in the last column
 If you press the comm hotkey, and a crew member is selected, it will initiate comm with that crew member. Otherwise, it will comm the object as normal.
 
 # Changes
+1.12: 2018-10-28
+- Fix error when a production module had an empty product list (thanks to bitvoid for the report)
+
 1.11: 2018-04-22
 - Improve compatibility with other mods that change the object menu (particularly xsalvation)
 
